@@ -2,8 +2,106 @@ import { useEffect, useRef, useState } from 'react'
 import { analyzeTextWithWatson } from '../utils/watsonNLU'
 import { getCurrentWeather, getWeatherForecast, assessHazardRisk, isWeatherAPIConfigured } from '../utils/weatherAPI'
 
-// Enhanced route analysis with Google Maps Directions and real-time weather
-async function getRouteAnalysis(routeStart, routeDest, hazardType, geocoder, directionsService) {
+// MDOT 511 real-time events fetch via local proxy (avoids CORS)
+async function fetchMdotEvents() {
+  const url = 'http://localhost:3001/api/mdot/events'
+  console.log('📡 MDOT Hazard Fetch (proxy): Requesting', url)
+  try {
+    const res = await fetch(url)
+    if (!res.ok) {
+      console.error('❌ Proxy MDOT fetch failed:', res.status, res.statusText)
+      return []
+    }
+    const data = await res.json()
+    console.log('📦 Proxy MDOT JSON response (raw):', data)
+    if (!Array.isArray(data)) {
+      console.warn('⚠️ Proxy MDOT response not an array. Raw:', data)
+      return []
+    }
+    const normalized = data.map((evt, idx) => normalizeMdotEvent(evt, idx)).filter(e => e.lat && e.lng)
+    console.log(`✅ Proxy MDOT events loaded: ${normalized.length}`)
+    return normalized
+  } catch (err) {
+    console.error('❌ Proxy MDOT fetch error:', err)
+    return []
+  }
+}
+
+function normalizeMdotEvent(evt, idx) {
+  // Attempt multiple field name variants
+  const lat = evt.latitude ?? evt.lat ?? evt.Location?.Latitude ?? evt.location?.lat ?? null
+  const lng = evt.longitude ?? evt.lon ?? evt.Location?.Longitude ?? evt.location?.lng ?? null
+  const eventType = (evt.eventType || evt.type || evt.category || 'other').toString().toLowerCase()
+  const description = evt.description || evt.title || evt.text || eventType
+  const impact = evt.impact || evt.delay || evt.effect || null
+  const startDate = evt.startDate || evt.start || evt.startTime || null
+  const endDate = evt.endDate || evt.end || evt.endTime || null
+  return {
+    id: evt.id || evt.eventId || `mdot-${idx}`,
+    eventType,
+    description,
+    impact,
+    startDate,
+    endDate,
+    lat: typeof lat === 'string' ? parseFloat(lat) : lat,
+    lng: typeof lng === 'string' ? parseFloat(lng) : lng
+  }
+}
+
+// Check if a hazard is near a location or route
+function isHazardNearLocation(hazard, location, thresholdMiles = 10) {
+  if (!hazard.lat || !hazard.lng || !location.lat || !location.lng) return false
+  if (!window.google?.maps) return false
+  
+  const hazardPoint = new window.google.maps.LatLng(hazard.lat, hazard.lng)
+  const locationPoint = new window.google.maps.LatLng(location.lat, location.lng)
+  const distanceMeters = window.google.maps.geometry.spherical.computeDistanceBetween(hazardPoint, locationPoint)
+  const distanceMiles = distanceMeters / 1609.34
+  return distanceMiles <= thresholdMiles
+}
+
+// Check if hazards are near route points
+function getHazardsNearRoute(hazards, routePath, thresholdMiles = 2) {
+  if (!routePath || !Array.isArray(routePath) || routePath.length === 0) return []
+  if (!window.google?.maps) return []
+  
+  const nearbyHazards = []
+  const thresholdMeters = thresholdMiles * 1609.34
+  
+  hazards.forEach(hazard => {
+    if (!hazard.lat || !hazard.lng) return
+    
+    const hazardPoint = new window.google.maps.LatLng(hazard.lat, hazard.lng)
+    let minDistance = Infinity
+    
+    // Check distance to nearest route point
+    for (let i = 0; i < routePath.length; i++) {
+      const routePoint = routePath[i]
+      let routeLatLng
+      if (routePoint.lat && routePoint.lng) {
+        routeLatLng = new window.google.maps.LatLng(routePoint.lat, routePoint.lng)
+      } else if (Array.isArray(routePoint)) {
+        // Handle [lng, lat] format
+        routeLatLng = new window.google.maps.LatLng(routePoint[1], routePoint[0])
+      } else if (typeof routePoint === 'object' && routePoint.lat && routePoint.lng) {
+        routeLatLng = new window.google.maps.LatLng(routePoint.lat, routePoint.lng)
+      } else continue
+      
+      const distance = window.google.maps.geometry.spherical.computeDistanceBetween(hazardPoint, routeLatLng)
+      if (distance < minDistance) minDistance = distance
+      
+      if (distance <= thresholdMeters) {
+        nearbyHazards.push({ ...hazard, distanceMiles: distance / 1609.34 })
+        return
+      }
+    }
+  })
+  
+  return nearbyHazards
+}
+
+// Enhanced route analysis with Google Maps Directions, real-time weather, and MDOT hazards
+async function getRouteAnalysis(routeStart, routeDest, hazardType, geocoder, directionsService, liveHazards = []) {
   if (!geocoder || !directionsService) {
     return null
   }
@@ -119,6 +217,9 @@ async function getRouteAnalysis(routeStart, routeDest, hazardType, geocoder, dir
       }
     }
 
+    // Get hazards near the route
+    const routeHazards = getHazardsNearRoute(liveHazards, path, 2) // 2 miles threshold
+
     // Calculate overall route risk
     const totalRisk = weatherPoints.reduce((sum, p) => sum + p.risk.score, 0)
     const avgRisk = weatherPoints.length > 0 ? totalRisk / weatherPoints.length : 0
@@ -126,6 +227,12 @@ async function getRouteAnalysis(routeStart, routeDest, hazardType, geocoder, dir
     const mediumRiskZones = weatherPoints.filter(p => p.risk.level === 'Medium').length
 
     // Build comprehensive analysis text for Watson NLU
+    const hazardsText = routeHazards.length > 0
+      ? `\n\nHazards Along Route:\n${routeHazards.map((h, idx) => 
+          `${idx + 1}. ${h.eventType || 'Hazard'}: ${h.description || 'No description'}${h.impact ? ` (Impact: ${h.impact})` : ''}`
+        ).join('\n')}`
+      : '\n\nNo reported hazards along this route at this time.'
+
     const routeAnalysisText = `
       Route Analysis from ${routeStart} to ${routeDest}:
       
@@ -133,6 +240,7 @@ async function getRouteAnalysis(routeStart, routeDest, hazardType, geocoder, dir
       - Distance: ${leg.distance.text}
       - Estimated Duration: ${leg.duration.text}
       - Number of weather checkpoints: ${weatherPoints.length}
+      - Reported hazards along route: ${routeHazards.length}
       
       Hazard Type: ${hazardType}
       
@@ -153,10 +261,13 @@ async function getRouteAnalysis(routeStart, routeDest, hazardType, geocoder, dir
       - Medium Risk Zones: ${mediumRiskZones}
       - Low Risk Zones: ${weatherPoints.length - highRiskZones - mediumRiskZones}
       
+      ${hazardsText}
+      
       Analysis Request:
-      Based on these real-time weather conditions along the entire route, assess the overall safety for ${hazardType}.
+      Based on these real-time weather conditions${routeHazards.length > 0 ? ' and reported hazards' : ''} along the entire route, assess the overall safety for ${hazardType}.
       Identify the most dangerous segments, provide recommendations, and predict potential hazards.
-      Consider the route distance, weather variability, and risk distribution.
+      Consider the route distance, weather variability, risk distribution, and any existing hazards along the route.
+      ${routeHazards.length > 0 ? 'Pay special attention to the reported hazards as they indicate current road conditions or incidents.' : ''}
     `.trim()
 
     // Analyze with Watson NLU
@@ -179,6 +290,17 @@ async function getRouteAnalysis(routeStart, routeDest, hazardType, geocoder, dir
       overallRiskLevel = 'Medium'
     }
 
+    // Adjust based on route hazards
+    if (routeHazards.length > 0) {
+      const criticalRouteHazards = routeHazards.filter(h => {
+        const t = (h.eventType || '').toLowerCase()
+        return t.includes('accident') || t.includes('closure') || t.includes('weather') || t.includes('flood')
+      })
+      overallRiskScore = Math.min(100, overallRiskScore + (routeHazards.length * 5) + (criticalRouteHazards.length * 15))
+      if (overallRiskScore >= 60) overallRiskLevel = 'High'
+      else if (overallRiskScore >= 30 && overallRiskLevel === 'Low') overallRiskLevel = 'Medium'
+    }
+
     // Adjust based on NLU sentiment
     if (nluAnalysis?.sentiment?.document) {
       const sentiment = nluAnalysis.sentiment.document
@@ -189,12 +311,23 @@ async function getRouteAnalysis(routeStart, routeDest, hazardType, geocoder, dir
     }
 
     // Extract insights
-    const keywords = nluAnalysis?.keywords?.filter(k => {
+    let keywords = nluAnalysis?.keywords?.filter(k => {
       const text = k.text.toLowerCase()
       return text.includes('hazard') || text.includes('risk') || text.includes('danger') ||
              text.includes('ice') || text.includes('snow') || text.includes('flood') ||
-             text.includes('wind') || text.includes('visibility') || text.includes('caution')
+             text.includes('wind') || text.includes('visibility') || text.includes('caution') ||
+             text.includes('accident') || text.includes('closure') || text.includes('incident')
     }).slice(0, 5).map(k => k.text) || []
+    
+    // Add hazard types from route hazards
+    if (routeHazards.length > 0) {
+      const hazardTypes = routeHazards
+        .map(h => h.eventType)
+        .filter(Boolean)
+        .filter((type, idx, arr) => arr.indexOf(type) === idx) // unique
+        .slice(0, 3)
+      keywords = [...new Set([...keywords, ...hazardTypes])].slice(0, 8)
+    }
 
     const locations = nluAnalysis?.entities?.filter(e => 
       e.type === 'Location' || e.type === 'GeographicFeature'
@@ -209,7 +342,8 @@ async function getRouteAnalysis(routeStart, routeDest, hazardType, geocoder, dir
       leg.distance.text,
       leg.duration.text,
       keywords,
-      hazardType
+      hazardType,
+      routeHazards
     )
 
     return {
@@ -229,6 +363,7 @@ async function getRouteAnalysis(routeStart, routeDest, hazardType, geocoder, dir
       weatherPoints: weatherPoints,
       highRiskZones: highRiskZones,
       mediumRiskZones: mediumRiskZones,
+      routeHazards: routeHazards,
       directionsResult: directionsResult
     }
   } catch (error) {
@@ -237,14 +372,26 @@ async function getRouteAnalysis(routeStart, routeDest, hazardType, geocoder, dir
   }
 }
 
-function generateRouteExplanation(riskLevel, riskScore, highRiskZones, mediumRiskZones, distance, duration, keywords, hazardType) {
+function generateRouteExplanation(riskLevel, riskScore, highRiskZones, mediumRiskZones, distance, duration, keywords, hazardType, routeHazards = []) {
   let explanation = `${riskLevel} risk (${riskScore}%) detected along your ${distance} route (${duration}). `
   
+  if (routeHazards.length > 0) {
+    const criticalHazards = routeHazards.filter(h => {
+      const t = (h.eventType || '').toLowerCase()
+      return t.includes('accident') || t.includes('closure') || t.includes('weather')
+    })
+    if (criticalHazards.length > 0) {
+      explanation += `${routeHazards.length} reported hazard${routeHazards.length > 1 ? 's' : ''} along route, including ${criticalHazards.length} critical incident${criticalHazards.length > 1 ? 's' : ''}. `
+    } else {
+      explanation += `${routeHazards.length} reported hazard${routeHazards.length > 1 ? 's' : ''} along route. `
+    }
+  }
+  
   if (highRiskZones > 0) {
-    explanation += `${highRiskZones} high-risk zone${highRiskZones > 1 ? 's' : ''} identified. `
+    explanation += `${highRiskZones} high-risk weather zone${highRiskZones > 1 ? 's' : ''} identified. `
   }
   if (mediumRiskZones > 0) {
-    explanation += `${mediumRiskZones} moderate-risk zone${mediumRiskZones > 1 ? 's' : ''} found. `
+    explanation += `${mediumRiskZones} moderate-risk weather zone${mediumRiskZones > 1 ? 's' : ''} found. `
   }
   
   if (keywords.length > 0) {
@@ -253,10 +400,19 @@ function generateRouteExplanation(riskLevel, riskScore, highRiskZones, mediumRis
   
   if (riskLevel === 'High') {
     explanation += `Consider delaying travel or finding an alternative route. ${hazardType} conditions are likely along significant portions of this route.`
+    if (routeHazards.length > 0) {
+      explanation += ` Multiple reported incidents along this route increase the risk.`
+    }
   } else if (riskLevel === 'Medium') {
     explanation += `Exercise caution, especially in identified risk zones. Monitor conditions and drive defensively.`
+    if (routeHazards.length > 0) {
+      explanation += ` Be aware of reported hazards along the route.`
+    }
   } else {
     explanation += `Conditions appear favorable. Normal driving precautions recommended.`
+    if (routeHazards.length > 0) {
+      explanation += ` However, be aware of reported hazards along the route.`
+    }
   }
   
   return explanation
@@ -269,8 +425,11 @@ function PredictHazardsPage({ onBack, embed = false }) {
   const mapInstanceRef = useRef(null)
   const heatmapLayerRef = useRef(null)
   const [mapsLoaded, setMapsLoaded] = useState(false)
-  const [selectedHazard, setSelectedHazard] = useState('Icy Roads')
+  const [selectedHazard, setSelectedHazard] = useState(null) // No specific hazard selected - show all
+  const [allHazardRisks, setAllHazardRisks] = useState({})
   const [showExplain, setShowExplain] = useState(false)
+  const [explanationText, setExplanationText] = useState(null)
+  const [loadingExplanation, setLoadingExplanation] = useState(false)
   const [routeStart, setRouteStart] = useState('')
   const [routeDest, setRouteDest] = useState('')
   const [routeResult, setRouteResult] = useState(null)
@@ -289,6 +448,10 @@ function PredictHazardsPage({ onBack, embed = false }) {
   const [directionsService, setDirectionsService] = useState(null)
   const [directionsRenderer, setDirectionsRenderer] = useState(null)
   const [routePath, setRoutePath] = useState(null)
+  const [liveHazards, setLiveHazards] = useState([])
+  const [nearbyHazards, setNearbyHazards] = useState([])
+  const [loadingHazards, setLoadingHazards] = useState(false)
+  const hazardMarkersRef = useRef([])
 
   // Initialize geocoder and directions service when maps load
   useEffect(() => {
@@ -307,18 +470,63 @@ function PredictHazardsPage({ onBack, embed = false }) {
     }
   }, [mapsLoaded])
 
+  // Fetch MDOT hazards
+  const fetchHazards = async () => {
+    setLoadingHazards(true)
+    try {
+      const hazards = await fetchMdotEvents()
+      setLiveHazards(hazards)
+      
+      // Filter hazards near user location
+      if (userLocation) {
+        const nearby = hazards.filter(h => isHazardNearLocation(h, userLocation, 10))
+        setNearbyHazards(nearby)
+      } else {
+        setNearbyHazards([])
+      }
+    } catch (error) {
+      console.error('Error fetching hazards:', error)
+      setLiveHazards([])
+      setNearbyHazards([])
+    } finally {
+      setLoadingHazards(false)
+    }
+  }
+
   // Function to update location and fetch weather
   const updateLocation = async (lat, lng, name = '') => {
+    // Close any open explanations when location changes
+    setShowExplain(false)
+    setExplanationText(null)
+    
+    // Reset states to ensure fresh calculations
+    setWeatherData(null)
+    setHazardRisk(null)
+    setAllHazardRisks({})
+    setAiInsights(null)
+    
     const loc = { lat, lng }
     setUserLocation(loc)
     setLocationName(name)
     setLoadingWeather(true)
     
-    // Fetch real-time weather
-    const weather = await getCurrentWeather(lat, lng)
+    // Fetch real-time weather and hazards in parallel
+    const [weather, hazards] = await Promise.all([
+      getCurrentWeather(lat, lng),
+      fetchMdotEvents()
+    ])
+    
     if (weather) {
       setWeatherData(weather)
     }
+    
+    if (Array.isArray(hazards)) {
+      setLiveHazards(hazards)
+      // Filter hazards near location
+      const nearby = hazards.filter(h => isHazardNearLocation(h, loc, 10))
+      setNearbyHazards(nearby)
+    }
+    
     setLoadingWeather(false)
   }
 
@@ -343,22 +551,124 @@ function PredictHazardsPage({ onBack, embed = false }) {
       // Fallback to Ann Arbor
       updateLocation(42.2808, -83.7430, 'Ann Arbor, MI')
     }
+    
+    // Also fetch hazards independently
+    fetchHazards()
   }, [])
+  
+  // Update nearby hazards when location changes
+  useEffect(() => {
+    if (userLocation && liveHazards.length > 0) {
+      const nearby = liveHazards.filter(h => isHazardNearLocation(h, userLocation, 10))
+      setNearbyHazards(nearby)
+    }
+  }, [userLocation, liveHazards])
+  
+  // Display hazard markers on map
+  useEffect(() => {
+    if (!mapsLoaded || !mapInstanceRef.current || !liveHazards.length) return
+    
+    // Clear existing markers
+    hazardMarkersRef.current.forEach(marker => marker.setMap(null))
+    hazardMarkersRef.current = []
+    
+    // Add markers for hazards
+    liveHazards.forEach(hazard => {
+      if (!hazard.lat || !hazard.lng) return
+      
+      const color = getHazardColor(hazard.eventType)
+      const marker = new window.google.maps.Marker({
+        position: { lat: hazard.lat, lng: hazard.lng },
+        map: mapInstanceRef.current,
+        title: hazard.eventType || 'Hazard',
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 10,
+          fillColor: color,
+          fillOpacity: 0.8,
+          strokeColor: '#ffffff',
+          strokeWeight: 2
+        }
+      })
+      
+      const infoWindow = new window.google.maps.InfoWindow({
+        content: `<div style="padding:8px;max-width:240px;">
+          <h3 style="margin:0 0 4px;color:#004e89;font-weight:600;font-size:13px;">${(hazard.eventType || '').toUpperCase()}</h3>
+          <p style="margin:0;font-size:12px;color:#555;">${hazard.description || 'No description'}</p>
+          ${hazard.impact ? `<p style="margin:4px 0 0;font-size:11px;color:#777;">Impact: ${hazard.impact}</p>` : ''}
+        </div>`
+      })
+      
+      marker.addListener('click', () => infoWindow.open(mapInstanceRef.current, marker))
+      hazardMarkersRef.current.push(marker)
+    })
+  }, [mapsLoaded, liveHazards])
+
+function getHazardColor(eventType) {
+  const t = (eventType || '').toLowerCase()
+  if (t.includes('accident') || t.includes('crash')) return '#FFD93D'
+  if (t.includes('construct') || t.includes('work')) return '#FF6B6B'
+  if (t.includes('closure') || t.includes('closed')) return '#DC143C'
+  if (t.includes('congestion') || t.includes('traffic')) return '#FFA500'
+  if (t.includes('weather')) return '#4ECDC4'
+  if (t.includes('lane')) return '#9370DB'
+  return '#808080'
+}
 
   // Handle location search
   const handleLocationSearch = async (e) => {
     e.preventDefault()
-    if (!locationInput.trim() || !geocoder) return
+    e.stopPropagation()
+    
+    const searchQuery = locationInput.trim()
+    if (!searchQuery) return
+
+    // Close any open explanations when searching new location
+    setShowExplain(false)
+    setExplanationText(null)
+    
+    // Ensure geocoder is available
+    if (!geocoder) {
+      if (window.google && window.google.maps) {
+        const newGeocoder = new window.google.maps.Geocoder()
+        setGeocoder(newGeocoder)
+        // Wait a bit for state update, then retry
+        setTimeout(() => {
+          handleLocationSearch(e)
+        }, 100)
+        return
+      } else {
+        alert('Maps service is not ready yet. Please wait a moment and try again.')
+        return
+      }
+    }
 
     setLoadingWeather(true)
-    geocoder.geocode({ address: locationInput }, async (results, status) => {
-      if (status === 'OK' && results[0]) {
+    
+    // Use the geocoder with proper error handling
+    const geo = geocoder || (window.google?.maps ? new window.google.maps.Geocoder() : null)
+    if (!geo) {
+      setLoadingWeather(false)
+      alert('Geocoding service not available. Please refresh the page.')
+      return
+    }
+    
+    geo.geocode({ address: searchQuery }, async (results, status) => {
+      if (status === 'OK' && results && results[0]) {
         const loc = results[0].geometry.location
         const name = results[0].formatted_address
         await updateLocation(loc.lat(), loc.lng(), name)
         setLocationInput('')
       } else {
-        alert('Location not found. Please try a different address or city name.')
+        let errorMsg = 'Location not found.'
+        if (status === 'ZERO_RESULTS') {
+          errorMsg = 'No results found for this location. Please try a different address or city name.'
+        } else if (status === 'OVER_QUERY_LIMIT') {
+          errorMsg = 'Too many requests. Please wait a moment and try again.'
+        } else if (status === 'REQUEST_DENIED') {
+          errorMsg = 'Geocoding request denied. Please check your API key settings.'
+        }
+        alert(errorMsg)
         setLoadingWeather(false)
       }
     })
@@ -366,7 +676,12 @@ function PredictHazardsPage({ onBack, embed = false }) {
 
   // Handle use current location button
   const handleUseCurrentLocation = () => {
+    // Close any open explanations when changing location
+    setShowExplain(false)
+    setExplanationText(null)
+    
     if (navigator.geolocation) {
+      setLoadingWeather(true)
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           await updateLocation(
@@ -377,6 +692,7 @@ function PredictHazardsPage({ onBack, embed = false }) {
         },
         () => {
           alert('Unable to get your location. Please allow location access or search for a location.')
+          setLoadingWeather(false)
         },
         { enableHighAccuracy: true, maximumAge: 300000, timeout: 10000 }
       )
@@ -385,13 +701,99 @@ function PredictHazardsPage({ onBack, embed = false }) {
     }
   }
 
-  // Update hazard risk assessment when weather or hazard type changes
-  useEffect(() => {
-    if (weatherData && selectedHazard) {
-      const risk = assessHazardRisk(weatherData, selectedHazard)
-      setHazardRisk(risk)
+  // Analyze historical accident patterns from past hazards
+  const analyzeHistoricalPatterns = (hazards, location, daysBack = 7) => {
+    if (!hazards || hazards.length === 0) return { accidents: 0, patterns: [] }
+    
+    const now = new Date()
+    const pastDate = new Date(now.getTime() - (daysBack * 24 * 60 * 60 * 1000))
+    
+    // Filter hazards within the location area and time period
+    const historicalHazards = hazards.filter(h => {
+      if (!h.startDate && !h.endDate) return false
+      const hazardDate = h.startDate ? new Date(h.startDate) : new Date(h.endDate)
+      return hazardDate >= pastDate && hazardDate <= now
+    })
+    
+    // Count accidents by type
+    const accidentTypes = {}
+    const weatherConditions = {}
+    
+    historicalHazards.forEach(h => {
+      const type = (h.eventType || '').toLowerCase()
+      if (type.includes('accident') || type.includes('crash') || type.includes('incident')) {
+        accidentTypes[type] = (accidentTypes[type] || 0) + 1
+      }
+      if (type.includes('weather') || type.includes('snow') || type.includes('ice') || type.includes('flood')) {
+        weatherConditions[type] = (weatherConditions[type] || 0) + 1
+      }
+    })
+    
+    const patterns = []
+    if (Object.keys(accidentTypes).length > 0) {
+      patterns.push(`Past ${daysBack} days: ${historicalHazards.filter(h => 
+        (h.eventType || '').toLowerCase().includes('accident')
+      ).length} accidents reported`)
     }
-  }, [weatherData, selectedHazard])
+    if (Object.keys(weatherConditions).length > 0) {
+      patterns.push(`Historical weather incidents: ${Object.keys(weatherConditions).length} types`)
+    }
+    
+    return {
+      accidents: historicalHazards.filter(h => 
+        (h.eventType || '').toLowerCase().includes('accident') || 
+        (h.eventType || '').toLowerCase().includes('crash')
+      ).length,
+      weatherIncidents: Object.keys(weatherConditions).length,
+      totalIncidents: historicalHazards.length,
+      patterns: patterns
+    }
+  }
+
+  // Update hazard risk assessment for all hazard types when weather changes
+  useEffect(() => {
+    if (weatherData && userLocation) {
+      const hazardTypes = ['Icy Roads', 'Flood Risk', 'Low Visibility', 'High Wind Risk', 'Accident Likelihood']
+      const risks = {}
+      hazardTypes.forEach(type => {
+        risks[type] = assessHazardRisk(weatherData, type)
+      })
+      
+      // Analyze historical patterns - always recalculate when location or hazards change
+      const historical = analyzeHistoricalPatterns(liveHazards, userLocation, 7)
+      
+      // Adjust risk scores based on historical accident data
+      if (historical.accidents > 0) {
+        Object.keys(risks).forEach(type => {
+          if (type === 'Accident Likelihood') {
+            risks[type].score = Math.min(100, risks[type].score + (historical.accidents * 5))
+            if (risks[type].score >= 60) risks[type].level = 'High'
+            else if (risks[type].score >= 30) risks[type].level = 'Medium'
+          }
+        })
+      }
+      
+      // Update all hazard risks first
+      setAllHazardRisks(risks)
+      
+      // Calculate overall risk (average or highest)
+      const riskScores = Object.values(risks).map(r => r.score)
+      const avgScore = riskScores.reduce((a, b) => a + b, 0) / riskScores.length
+      const maxRisk = Object.values(risks).find(r => r.score === Math.max(...riskScores))
+      
+      // Then update hazard risk
+      setHazardRisk({
+        level: maxRisk?.level || 'Low',
+        score: Math.round(avgScore),
+        factors: Object.values(risks).flatMap(r => r.factors).filter((v, i, a) => a.indexOf(v) === i).slice(0, 5),
+        historicalData: historical
+      })
+    } else if (!weatherData) {
+      // Reset when weather data is cleared
+      setAllHazardRisks({})
+      setHazardRisk(null)
+    }
+  }, [weatherData, liveHazards, userLocation])
 
   // Update heatmap based on real weather data
   useEffect(() => {
@@ -499,38 +901,59 @@ function PredictHazardsPage({ onBack, embed = false }) {
 
   // Generate AI insights using real weather data + Watson NLU for intelligent predictions
   useEffect(() => {
+    // Reset insights when location changes (before new data loads)
+    if (!weatherData || !userLocation || Object.keys(allHazardRisks).length === 0) {
+      setAiInsights(null)
+      setLoadingInsights(false)
+      return
+    }
+    
     const generateInsights = async () => {
       setLoadingInsights(true)
-      
-      if (!weatherData) {
-        setLoadingInsights(false)
-        return
-      }
 
-      // Build comprehensive analysis text with all weather data
+      // Analyze historical accident patterns
+      const historical = hazardRisk?.historicalData || analyzeHistoricalPatterns(liveHazards, userLocation, 7)
+      
+      // Build comprehensive analysis text with current and historical data
+      const nearbyHazardsText = nearbyHazards.length > 0 
+        ? `\nNearby Reported Hazards (within 10 miles):\n${nearbyHazards.slice(0, 5).map((h, idx) => 
+          `${idx + 1}. ${h.eventType || 'Hazard'}: ${h.description || 'No description'}${h.impact ? ` (Impact: ${h.impact})` : ''}`
+        ).join('\n')}`
+        : '\nNo nearby reported hazards at this time.'
+      
+      const historicalText = historical.accidents > 0 || historical.totalIncidents > 0
+        ? `\nHistorical Accident Data (past 7 days):\n- Total incidents: ${historical.totalIncidents}\n- Accidents: ${historical.accidents}\n- Weather-related incidents: ${historical.weatherIncidents}`
+        : '\nNo recent historical accident data available for this area.'
+      
+      const allRisksText = Object.entries(allHazardRisks).map(([type, risk]) => 
+        `- ${type}: ${risk.level} risk (${risk.score}%) - Factors: ${risk.factors.join(', ') || 'None'}`
+      ).join('\n')
+      
       const weatherContext = `
-        Hazard Prediction Analysis for ${selectedHazard}:
+        Road Hazard Prediction Analysis:
         
-        Current Weather Conditions:
+        Current Weather:
         - Temperature: ${weatherData.temp}°F (feels like ${weatherData.feelsLike}°F)
-        - Weather Condition: ${weatherData.condition} - ${weatherData.description}
-        - Wind Speed: ${weatherData.windSpeed} mph
+        - Condition: ${weatherData.condition} - ${weatherData.description}
+        - Wind: ${weatherData.windSpeed} mph
         - Humidity: ${weatherData.humidity}%
         - Visibility: ${weatherData.visibility ? weatherData.visibility + ' miles' : 'Unknown'}
         - Precipitation: ${weatherData.precipitation > 0 ? weatherData.precipitation.toFixed(2) + ' inches' : 'None'}
         
         Location: ${locationName || 'Michigan'}
         
-        Hazard Type: ${selectedHazard}
+        Current Risk Assessment:
+        ${allRisksText}
         
-        Risk Assessment Factors:
-        ${hazardRisk ? hazardRisk.factors.map(f => `- ${f}`).join('\n') : '- Analyzing conditions...'}
+        ${historicalText}
         
-        Prediction Context:
-        Based on these real-time weather conditions, predict the likelihood of ${selectedHazard} occurring.
-        Consider temperature trends, precipitation patterns, wind conditions, and visibility.
-        Assess the risk level and provide actionable insights for drivers.
-        Identify key warning signs and recommended precautions.
+        ${nearbyHazardsText}
+        
+        Analysis Request:
+        Using both current weather conditions and historical accident data from the past week, predict road hazard likelihood.
+        Consider that ${historical.accidents} accidents were reported in this area recently.
+        Current conditions show: ${Object.entries(allHazardRisks).filter(([type, risk]) => risk.level === 'High').map(([type]) => type).join(', ') || 'no high-risk hazards'}.
+        Provide a clear, simple assessment of what drivers should expect.
       `.trim()
 
       // Use Watson NLU to analyze the comprehensive weather context
@@ -559,26 +982,54 @@ function PredictHazardsPage({ onBack, embed = false }) {
         const concepts = analysis.concepts || []
         const sentiment = analysis.sentiment?.document
         
-        // Prioritize hazard-related keywords
-        const hazardKeywords = keywords
+        // Prioritize hazard-related keywords, including nearby reported hazards
+        let hazardKeywords = keywords
           .filter(k => {
             const text = k.text.toLowerCase()
             return text.includes('ice') || text.includes('snow') || text.includes('freez') ||
                    text.includes('flood') || text.includes('water') || text.includes('rain') ||
                    text.includes('wind') || text.includes('visibility') || text.includes('fog') ||
                    text.includes('hazard') || text.includes('risk') || text.includes('danger') ||
-                   text.includes('slippery') || text.includes('wet') || text.includes('storm')
+                   text.includes('slippery') || text.includes('wet') || text.includes('storm') ||
+                   text.includes('accident') || text.includes('closure') || text.includes('incident')
           })
           .slice(0, 5)
           .map(k => k.text)
+        
+        // Add nearby hazard types if available
+        if (nearbyHazards.length > 0) {
+          const hazardTypes = nearbyHazards.map(h => h.eventType).filter(Boolean)
+          hazardKeywords = [...new Set([...hazardKeywords, ...hazardTypes.slice(0, 3)])]
+        }
 
         // Get location entities
         const locations = entities
           .filter(e => e.type === 'Location' || e.type === 'GeographicFeature')
           .map(e => e.text)
 
-        // Calculate confidence based on NLU sentiment and risk score
+        // Calculate confidence based on NLU sentiment, risk score, nearby hazards, and historical data
         let confidence = hazardRisk ? hazardRisk.score : 50
+        
+        // Adjust for historical accidents (past data is a strong predictor)
+        const historicalData = hazardRisk?.historicalData || analyzeHistoricalPatterns(liveHazards, userLocation, 7)
+        if (historicalData.accidents > 0) {
+          // Each past accident in the area increases confidence by 8-12%
+          confidence = Math.min(100, confidence + (historicalData.accidents * 10))
+          if (historicalData.accidents >= 3) {
+            // High historical accident rate is a major indicator
+            confidence = Math.min(100, confidence + 15)
+          }
+        }
+        
+        // Adjust for nearby hazards
+        if (nearbyHazards.length > 0) {
+          const criticalHazards = nearbyHazards.filter(h => {
+            const t = (h.eventType || '').toLowerCase()
+            return t.includes('accident') || t.includes('closure') || t.includes('weather') || t.includes('flood')
+          })
+          confidence = Math.min(100, confidence + (nearbyHazards.length * 5) + (criticalHazards.length * 10))
+        }
+        
         if (sentiment) {
           // Adjust confidence based on sentiment
           if (sentiment.label === 'negative') {
@@ -594,19 +1045,35 @@ function PredictHazardsPage({ onBack, embed = false }) {
         const predictionTime = new Date(now.getTime() + predictionHours * 60 * 60 * 1000)
         const timeWindow = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')} - ${predictionTime.getHours()}:${String(predictionTime.getMinutes()).padStart(2, '0')}`
 
-        // Build intelligent prediction text
+        // Build intelligent prediction text for all hazards using current and historical data
+        const highRiskHazards = Object.entries(allHazardRisks).filter(([type, risk]) => risk.level === 'High')
+        const mediumRiskHazards = Object.entries(allHazardRisks).filter(([type, risk]) => risk.level === 'Medium')
+        
         let predictionText = ''
-        if (hazardRisk) {
-          if (hazardRisk.level === 'High') {
-            predictionText = `There is a ${Math.round(confidence)}% chance of ${selectedHazard.toLowerCase()} conditions`
-          } else if (hazardRisk.level === 'Medium') {
-            predictionText = `There is a ${Math.round(confidence)}% chance of ${selectedHazard.toLowerCase()} conditions developing`
-          } else {
-            predictionText = `Low probability (${Math.round(confidence)}%) of ${selectedHazard.toLowerCase()} conditions`
+        if (highRiskHazards.length > 0) {
+          const hazardNames = highRiskHazards.map(([type]) => type.toLowerCase()).join(', ')
+          predictionText = `High risk of ${hazardNames} based on current conditions`
+          if (historicalData.accidents > 0) {
+            predictionText += ` and ${historicalData.accidents} recent accident${historicalData.accidents > 1 ? 's' : ''} in this area`
           }
+          predictionText += `. Drive with extreme caution.`
+        } else if (mediumRiskHazards.length > 0) {
+          const hazardNames = mediumRiskHazards.map(([type]) => type.toLowerCase()).join(', ')
+          predictionText = `Moderate risk of ${hazardNames}`
+          if (historicalData.accidents > 0) {
+            predictionText += `. Note: ${historicalData.accidents} accident${historicalData.accidents > 1 ? 's' : ''} reported nearby in the past week`
+          }
+          predictionText += `. Exercise caution while driving.`
         } else {
-          predictionText = `Analyzing ${selectedHazard.toLowerCase()} risk`
+          predictionText = `Low risk conditions. Normal driving precautions recommended.`
+          if (historicalData.accidents > 0) {
+            predictionText += ` However, ${historicalData.accidents} accident${historicalData.accidents > 1 ? 's were' : ' was'} reported in this area recently, so stay alert.`
+          }
         }
+
+        // Determine overall risk level from all hazards
+        const overallRiskLevel = highRiskHazards.length > 0 ? 'High' : 
+                                mediumRiskHazards.length > 0 ? 'Medium' : 'Low'
 
         setAiInsights({
           keywords: hazardKeywords.length > 0 ? hazardKeywords : keywords.slice(0, 5).map(k => k.text),
@@ -616,29 +1083,45 @@ function PredictHazardsPage({ onBack, embed = false }) {
           timeWindow: timeWindow,
           locations: locations,
           concepts: concepts.slice(0, 3).map(c => c.text),
-          riskLevel: hazardRisk?.level || 'Unknown',
-          factors: hazardRisk?.factors || []
+          riskLevel: overallRiskLevel,
+          factors: hazardRisk?.factors || [],
+          allHazardRisks: allHazardRisks
         })
       } else {
         // Fallback using real weather data only
         const confidence = hazardRisk ? hazardRisk.score : 50
+        const fallbackHighRisks = Object.entries(allHazardRisks).filter(([type, risk]) => risk.level === 'High')
+        const fallbackMediumRisks = Object.entries(allHazardRisks).filter(([type, risk]) => risk.level === 'Medium')
+        const overallLevel = fallbackHighRisks.length > 0 ? 'High' : 
+                           fallbackMediumRisks.length > 0 ? 'Medium' : 'Low'
+        
         setAiInsights({
           keywords: hazardRisk?.factors || ['weather conditions', 'road safety'],
           sentiment: 'neutral',
           confidence: confidence,
-          prediction: `Risk assessment: ${hazardRisk?.level || 'Unknown'}`,
+          prediction: overallLevel === 'High' ? 'High risk conditions detected' : 
+                     overallLevel === 'Medium' ? 'Moderate risk conditions' : 
+                     'Low risk conditions',
           timeWindow: 'Next 2-4 hours',
           locations: [],
           concepts: [],
-          riskLevel: hazardRisk?.level || 'Unknown',
-          factors: hazardRisk?.factors || []
+          riskLevel: overallLevel,
+          factors: hazardRisk?.factors || [],
+          allHazardRisks: allHazardRisks
         })
       }
       setLoadingInsights(false)
     }
 
-    generateInsights()
-  }, [selectedHazard, weatherData, hazardRisk, locationName])
+    // Only generate insights if we have weather data and hazard risks calculated
+    if (weatherData && Object.keys(allHazardRisks).length > 0) {
+      generateInsights()
+    } else {
+      // Reset insights if data is not ready
+      setAiInsights(null)
+      setLoadingInsights(false)
+    }
+  }, [weatherData, hazardRisk, locationName, allHazardRisks, nearbyHazards, userLocation])
 
   const submitRouteRisk = async (e) => {
     e.preventDefault()
@@ -701,7 +1184,8 @@ function PredictHazardsPage({ onBack, embed = false }) {
     }
     
     try {
-      const analysis = await getRouteAnalysis(routeStart, routeDest, selectedHazard, geo, dirService)
+      // Analyze route for general hazards (we'll use "Accident Likelihood" as it's the most comprehensive)
+      const analysis = await getRouteAnalysis(routeStart, routeDest, 'Accident Likelihood', geo, dirService, liveHazards)
       
       if (analysis.error) {
         setRouteResult({ 
@@ -725,13 +1209,75 @@ function PredictHazardsPage({ onBack, embed = false }) {
           }
         }
         
-        // Update heatmap with route weather points
-        if (heatmapLayerRef.current && analysis.weatherPoints.length > 0) {
-          const heatmapData = analysis.weatherPoints.map(p => ({
+        // Update heatmap with route weather points and hazards
+        if (heatmapLayerRef.current) {
+          const heatmapData = []
+          
+          // Add weather risk points
+          if (analysis.weatherPoints.length > 0) {
+            analysis.weatherPoints.forEach(p => {
+              heatmapData.push({
             location: new window.google.maps.LatLng(p.lat, p.lng),
             weight: p.risk.score / 100
-          }))
+              })
+            })
+          }
+          
+          // Add hazard points with higher weight
+          if (analysis.routeHazards && analysis.routeHazards.length > 0) {
+            analysis.routeHazards.forEach(hazard => {
+              if (hazard.lat && hazard.lng) {
+                const criticalHazard = (hazard.eventType || '').toLowerCase().includes('accident') ||
+                                      (hazard.eventType || '').toLowerCase().includes('closure') ||
+                                      (hazard.eventType || '').toLowerCase().includes('weather')
+                heatmapData.push({
+                  location: new window.google.maps.LatLng(hazard.lat, hazard.lng),
+                  weight: criticalHazard ? 0.9 : 0.7 // Higher weight for critical hazards
+                })
+              }
+            })
+          }
+          
+          if (heatmapData.length > 0) {
           heatmapLayerRef.current.setData(heatmapData)
+          }
+        }
+        
+        // Display route hazard markers
+        if (analysis.routeHazards && analysis.routeHazards.length > 0 && mapInstanceRef.current) {
+          // Clear existing route hazard markers (keep general hazard markers)
+          // We'll add route-specific markers
+          analysis.routeHazards.forEach(hazard => {
+            if (hazard.lat && hazard.lng) {
+              const color = getHazardColor(hazard.eventType)
+              const marker = new window.google.maps.Marker({
+                position: { lat: hazard.lat, lng: hazard.lng },
+                map: mapInstanceRef.current,
+                title: `Route Hazard: ${hazard.eventType || 'Hazard'}`,
+                icon: {
+                  path: window.google.maps.SymbolPath.CIRCLE,
+                  scale: 12,
+                  fillColor: color,
+                  fillOpacity: 0.9,
+                  strokeColor: '#ffffff',
+                  strokeWeight: 3
+                },
+                zIndex: 1000 // Ensure route hazards appear above other markers
+              })
+              
+              const infoWindow = new window.google.maps.InfoWindow({
+                content: `<div style="padding:8px;max-width:240px;">
+                  <h3 style="margin:0 0 4px;color:#004e89;font-weight:600;font-size:13px;">ROUTE HAZARD: ${(hazard.eventType || '').toUpperCase()}</h3>
+                  <p style="margin:0;font-size:12px;color:#555;">${hazard.description || 'No description'}</p>
+                  ${hazard.impact ? `<p style="margin:4px 0 0;font-size:11px;color:#777;">Impact: ${hazard.impact}</p>` : ''}
+                  <p style="margin:4px 0 0;font-size:11px;color:#dc143c;font-weight:600;">⚠️ On your route</p>
+                </div>`
+              })
+              
+              marker.addListener('click', () => infoWindow.open(mapInstanceRef.current, marker))
+              hazardMarkersRef.current.push(marker)
+            }
+          })
         }
         
         setRoutePath(analysis.route?.path || null)
@@ -748,7 +1294,8 @@ function PredictHazardsPage({ onBack, embed = false }) {
           duration: analysis.route?.duration,
           startAddress: analysis.route?.startAddress,
           endAddress: analysis.route?.endAddress,
-          weatherPoints: analysis.weatherPoints
+          weatherPoints: analysis.weatherPoints,
+          routeHazards: analysis.routeHazards || []
         })
       }
     } catch (error) {
@@ -774,27 +1321,40 @@ function PredictHazardsPage({ onBack, embed = false }) {
       </div>
 
       <div className="px-4 pt-2 pb-4 max-w-6xl mx-auto w-full flex-1 overflow-hidden flex flex-col min-h-0">
-        <p className="text-[#004e89] text-lg mb-4 font-medium">AI-powered hazard forecasting for Michigan drivers.</p>
         
         {/* Location Selector */}
         <div className="mb-4 bg-white rounded-xl shadow border border-gray-100 p-3 flex-shrink-0">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <label className="text-sm font-semibold text-[#004e89] whitespace-nowrap">Location:</label>
-            <form onSubmit={handleLocationSearch} className="flex-1 flex gap-2">
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault()
+                handleLocationSearch(e)
+              }} 
+              className="flex-1 flex gap-2"
+            >
               <input
                 type="text"
                 value={locationInput}
                 onChange={(e) => setLocationInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    if (!loadingWeather && locationInput.trim()) {
+                      handleLocationSearch(e)
+                    }
+                  }
+                }}
                 placeholder="Search city or address (e.g., Detroit, MI or 123 Main St)"
                 className="flex-1 border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-michigan-gold"
-                disabled={!geocoder || loadingWeather}
+                disabled={loadingWeather}
               />
               <button
                 type="submit"
-                disabled={!geocoder || loadingWeather || !locationInput.trim()}
+                disabled={loadingWeather || !locationInput.trim()}
                 className="px-4 py-2 bg-[#004e89] text-white font-semibold rounded-lg hover:bg-[#003d6b] transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
               >
-                Search
+                {loadingWeather ? 'Searching...' : 'Search'}
               </button>
               <button
                 type="button"
@@ -932,26 +1492,8 @@ function PredictHazardsPage({ onBack, embed = false }) {
                       aiInsights.riskLevel === 'Medium' ? 'bg-yellow-50 border-yellow-300' :
                       'bg-green-50 border-green-300'
                     }`}>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-2xl">
-                            {aiInsights.riskLevel === 'High' ? '⚠️' :
-                             aiInsights.riskLevel === 'Medium' ? '⚡' : '✅'}
-                          </span>
-                          <h4 className="font-bold text-base text-[#004e89]">
-                            {selectedHazard}
-                          </h4>
-                        </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                          aiInsights.riskLevel === 'High' ? 'bg-red-200 text-red-800' :
-                          aiInsights.riskLevel === 'Medium' ? 'bg-yellow-200 text-yellow-800' :
-                          'bg-green-200 text-green-800'
-                        }`}>
-                          {aiInsights.riskLevel} Risk
-                        </span>
-                      </div>
                       <p className="text-sm text-gray-800 leading-relaxed mb-2">
-                        {aiInsights.prediction || `There is a ${aiInsights.confidence}% chance of ${selectedHazard.toLowerCase()} conditions`}
+                        {aiInsights.prediction || `Overall risk assessment: ${aiInsights.confidence}%`}
                         {locationName && (
                           <span className="block mt-1 text-xs text-gray-600">
                             Location: <span className="font-semibold">{locationName.split(',')[0]}</span>
@@ -970,6 +1512,30 @@ function PredictHazardsPage({ onBack, embed = false }) {
                         </div>
                       </div>
                     </div>
+
+                    {/* All Hazard Types Summary */}
+                    {aiInsights.allHazardRisks && (
+                      <div className="bg-gray-50 rounded-lg p-2 border border-gray-200">
+                        <h5 className="font-bold text-xs text-gray-800 mb-1.5 flex items-center">
+                          <span className="mr-2">📊</span>
+                          Hazard Type Summary
+                        </h5>
+                        <div className="space-y-1.5">
+                          {Object.entries(aiInsights.allHazardRisks).map(([type, risk]) => (
+                            <div key={type} className="flex items-center justify-between bg-white rounded px-2 py-1 border border-gray-200">
+                              <span className="text-xs font-medium text-gray-700">{type}:</span>
+                              <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                                risk.level === 'High' ? 'bg-red-100 text-red-700' :
+                                risk.level === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-green-100 text-green-700'
+                              }`}>
+                                {risk.level} ({risk.score}%)
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Key Risk Factors */}
                     {aiInsights.factors.length > 0 && (
@@ -1005,6 +1571,32 @@ function PredictHazardsPage({ onBack, embed = false }) {
                         </div>
                       </div>
                     )}
+
+                    {/* Nearby Reported Hazards */}
+                    {nearbyHazards.length > 0 && (
+                      <div className="bg-orange-50 rounded-lg p-2 border border-orange-200">
+                        <h5 className="font-bold text-xs text-gray-800 mb-1.5 flex items-center">
+                          <span className="mr-2">⚠️</span>
+                          Nearby Reported Hazards ({nearbyHazards.length})
+                        </h5>
+                        <ul className="space-y-1 max-h-24 overflow-y-auto">
+                          {nearbyHazards.slice(0, 3).map((hazard, idx) => (
+                            <li key={hazard.id || idx} className="flex items-start space-x-2 text-xs text-gray-700">
+                              <span className="text-orange-600 mt-0.5 font-bold">•</span>
+                              <div className="flex-1">
+                                <span className="font-semibold capitalize">{hazard.eventType || 'Hazard'}:</span>
+                                <span className="ml-1">{hazard.description?.substring(0, 50) || 'No description'}{hazard.description?.length > 50 ? '...' : ''}</span>
+                              </div>
+                            </li>
+                          ))}
+                          {nearbyHazards.length > 3 && (
+                            <li className="text-xs text-gray-500 italic">
+                              + {nearbyHazards.length - 3} more hazards nearby
+                            </li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div className="text-center py-12">
@@ -1016,107 +1608,131 @@ function PredictHazardsPage({ onBack, embed = false }) {
                 {/* Explanation Button */}
                 {aiInsights && (
                   <button
-                    onClick={() => setShowExplain(prev => !prev)}
-                    className="w-full text-xs font-semibold bg-michigan-gold text-[#004e89] px-3 py-1.5 rounded-md shadow hover:brightness-95 transition mt-1"
+                    onClick={async () => {
+                      if (showExplain) {
+                        setShowExplain(false)
+                        return
+                      }
+                      
+                      setShowExplain(true)
+                      setLoadingExplanation(true)
+                      
+                      // Generate natural language explanation
+                      try {
+                        const historicalAnalysis = hazardRisk?.historicalData || analyzeHistoricalPatterns(liveHazards, userLocation, 7)
+                        const explanationPrompt = `
+                          Based on the following hazard prediction data, provide a clear, simple explanation (3-4 sentences) of what drivers should know:
+                          
+                          Current Weather:
+                          - Temperature: ${weatherData?.temp}°F (feels like ${weatherData?.feelsLike}°F)
+                          - Condition: ${weatherData?.description || 'Unknown'}
+                          - Wind: ${weatherData?.windSpeed || 0} mph
+                          - Visibility: ${weatherData?.visibility || 'Unknown'} miles
+                          - Precipitation: ${weatherData?.precipitation || 0} inches
+                          
+                          Past Accident Data (last 7 days):
+                          ${historicalAnalysis.accidents > 0 ? `- ${historicalAnalysis.accidents} accidents reported in this area\n- ${historicalAnalysis.totalIncidents} total incidents` : '- No recent accidents reported'}
+                          
+                          Current Risk Assessment:
+                          ${Object.entries(allHazardRisks || {}).map(([type, risk]) => 
+                            `- ${type}: ${risk.level} risk`
+                          ).join('\n')}
+                          
+                          ${nearbyHazards.length > 0 ? `Active Hazards Nearby: ${nearbyHazards.length} incidents including ${nearbyHazards.slice(0, 3).map(h => h.eventType).join(', ')}` : 'No active hazards nearby'}
+                          
+                          Overall: ${aiInsights.riskLevel} risk (${aiInsights.confidence}% confidence)
+                          
+                          Explain in simple, everyday language what this means for drivers right now. Keep it clear and easy to understand.
+                        `
+                        
+                        const analysis = await analyzeTextWithWatson(explanationPrompt, {
+                          features: {
+                            keywords: { limit: 10 },
+                            sentiment: {},
+                            concepts: { limit: 5 }
+                          }
+                        })
+                        
+                        // Generate simple, human-friendly summary using historical data
+                        const highRiskHazards = Object.entries(allHazardRisks || {}).filter(([type, risk]) => risk.level === 'High')
+                        const mediumRiskHazards = Object.entries(allHazardRisks || {}).filter(([type, risk]) => risk.level === 'Medium')
+                        
+                        // Build simple, conversational summary
+                        let summary = ''
+                        
+                        // Start with current conditions
+                        if (highRiskHazards.length > 0) {
+                          const hazardNames = highRiskHazards.map(([type]) => type.toLowerCase()).join(', ')
+                          summary += `Right now, the weather is creating dangerous conditions. We're seeing a high risk of ${hazardNames}. `
+                          
+                          // Add specific weather context
+                          if (weatherData.temp <= 32 && highRiskHazards.some(([type]) => type.includes('Ice'))) {
+                            summary += `It's below freezing (${weatherData.temp}°F), so ice is likely on the roads. `
+                          }
+                          if (weatherData.precipitation > 0) {
+                            summary += `There's ${weatherData.precipitation.toFixed(2)} inches of precipitation, making roads slippery. `
+                          }
+                          if (weatherData.visibility && weatherData.visibility < 3) {
+                            summary += `Visibility is low at ${weatherData.visibility} miles, making it hard to see hazards ahead. `
+                          }
+                        } else if (mediumRiskHazards.length > 0) {
+                          const hazardNames = mediumRiskHazards.map(([type]) => type.toLowerCase()).join(', ')
+                          summary += `Conditions are moderately risky. There's a chance of ${hazardNames}. `
+                          summary += `Be extra careful and drive slower than usual. `
+                        } else {
+                          summary += `The weather looks good right now. Risk is low across all hazard types, so driving conditions should be normal. `
+                        }
+                        
+                        // Add historical context from past accident data
+                        if (historicalAnalysis.accidents > 0) {
+                          summary += `Looking at the past week, there were ${historicalAnalysis.accidents} accident${historicalAnalysis.accidents > 1 ? 's' : ''} reported in this area, which suggests this location can be risky when weather conditions are poor. `
+                        }
+                        
+                        // Add nearby hazards
+                        if (nearbyHazards.length > 0) {
+                          summary += `There ${nearbyHazards.length === 1 ? 'is' : 'are'} also ${nearbyHazards.length} active incident${nearbyHazards.length > 1 ? 's' : ''} nearby that drivers should be aware of. `
+                        }
+                        
+                        // Add recommendation
+                        if (highRiskHazards.length > 0) {
+                          summary += `Our recommendation: if possible, delay your trip or take extra precautions. Slow down significantly, increase following distance, and be prepared to stop suddenly.`
+                        } else if (mediumRiskHazards.length > 0) {
+                          summary += `Our recommendation: drive cautiously, reduce your speed, and stay alert for changing conditions.`
+                        } else {
+                          summary += `Our recommendation: normal driving precautions are sufficient, but always stay alert for changing weather conditions.`
+                        }
+                        
+                        setExplanationText(summary)
+                      } catch (error) {
+                        console.error('Error generating explanation:', error)
+                        setExplanationText('Error generating explanation. Please try again.')
+                      } finally {
+                        setLoadingExplanation(false)
+                      }
+                    }}
+                    disabled={loadingExplanation}
+                    className="w-full text-xs font-semibold bg-michigan-gold text-[#004e89] px-3 py-1.5 rounded-md shadow hover:brightness-95 transition mt-1 disabled:opacity-50"
                   >
-                    {showExplain ? 'Hide Details' : 'Show How This Works'}
+                    {loadingExplanation ? 'Generating...' : showExplain ? 'Hide Details' : 'Show How This Works'}
                   </button>
                 )}
                 {showExplain && aiInsights && (
-                  <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-3">
-                    {weatherData && hazardRisk && aiInsights ? (
-                      <>
-                        <div className="flex items-center space-x-2 mb-3">
-                          <span className="text-xl">🔍</span>
-                          <h5 className="font-bold text-sm text-[#004e89]">How This Prediction Works</h5>
+                  <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                    {loadingExplanation ? (
+                      <div className="text-center py-4">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#004e89] mx-auto mb-2"></div>
+                        <p className="text-xs text-gray-500">Generating explanation...</p>
                         </div>
-                        
-                        {/* Step 1: Weather Data */}
-                        <div className="bg-white rounded-lg p-3 border-l-4 border-blue-500">
-                          <div className="flex items-center space-x-2 mb-2">
-                            <span className="bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">1</span>
-                            <h6 className="font-bold text-xs text-blue-700">Real-Time Weather Data</h6>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2 ml-8 text-xs text-gray-600">
+                    ) : explanationText ? (
                             <div>
-                              <span className="font-semibold">Temp:</span> {weatherData.temp}°F
-                              {weatherData.feelsLike !== weatherData.temp && (
-                                <span className="text-gray-500"> (feels {weatherData.feelsLike}°F)</span>
-                              )}
-                            </div>
-                            <div>
-                              <span className="font-semibold">Condition:</span> {weatherData.description}
-                            </div>
-                            {weatherData.windSpeed > 0 && (
-                              <div>
-                                <span className="font-semibold">Wind:</span> {weatherData.windSpeed} mph
-                              </div>
-                            )}
-                            {weatherData.visibility && (
-                              <div>
-                                <span className="font-semibold">Visibility:</span> {weatherData.visibility} mi
-                              </div>
-                            )}
-                            <div>
-                              <span className="font-semibold">Humidity:</span> {weatherData.humidity}%
-                            </div>
-                            {weatherData.precipitation > 0 && (
-                              <div>
-                                <span className="font-semibold">Precipitation:</span> {weatherData.precipitation.toFixed(2)}"
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Step 2: Risk Calculation */}
-                        <div className="bg-white rounded-lg p-3 border-l-4 border-purple-500">
-                          <div className="flex items-center space-x-2 mb-2">
-                            <span className="bg-purple-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">2</span>
-                            <h6 className="font-bold text-xs text-purple-700">Risk Calculation</h6>
-                          </div>
-                          <p className="ml-8 text-xs text-gray-600">
-                            Analyzed weather conditions against {selectedHazard} patterns. 
-                            Calculated <span className="font-semibold">{hazardRisk.level} risk</span> with a score of <span className="font-semibold">{hazardRisk.score}%</span>.
+                        <h5 className="font-bold text-sm text-[#004e89] mb-2">How This Prediction Works</h5>
+                        <p className="text-xs text-gray-700 leading-relaxed">
+                          {explanationText}
                           </p>
                         </div>
-
-                        {/* Step 3: AI Analysis */}
-                        <div className="bg-white rounded-lg p-3 border-l-4 border-green-500">
-                          <div className="flex items-center space-x-2 mb-2">
-                            <span className="bg-green-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">3</span>
-                            <h6 className="font-bold text-xs text-green-700">Watson NLU AI Analysis</h6>
-                          </div>
-                          <div className="ml-8 space-y-1 text-xs text-gray-600">
-                            <div>
-                              <span className="font-semibold">Sentiment:</span> 
-                              <span className={`ml-1 px-2 py-0.5 rounded ${
-                                aiInsights.sentiment === 'negative' ? 'bg-red-100 text-red-700' :
-                                aiInsights.sentiment === 'positive' ? 'bg-green-100 text-green-700' :
-                                'bg-gray-100 text-gray-700'
-                              }`}>
-                                {aiInsights.sentiment}
-                              </span>
-                            </div>
-                            {aiInsights.concepts.length > 0 && (
-                              <div>
-                                <span className="font-semibold">Key Concepts:</span> 
-                                <span className="ml-1">{aiInsights.concepts.slice(0, 3).join(', ')}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Final Summary */}
-                        <div className="bg-[#004e89] text-white rounded-lg p-3 mt-2">
-                          <p className="text-xs font-semibold mb-1">📊 Final Prediction</p>
-                          <p className="text-xs leading-relaxed opacity-90">
-                            The <span className="font-bold">{aiInsights.confidence}%</span> confidence score combines real-time weather data analysis with AI-powered pattern recognition to predict {selectedHazard.toLowerCase()} likelihood.
-                          </p>
-                        </div>
-                      </>
                     ) : (
                       <div className="text-center py-4">
-                        <p className="text-xs text-gray-500">Loading detailed analysis explanation...</p>
+                        <p className="text-xs text-gray-500">Click the button above to generate explanation</p>
                       </div>
                     )}
                   </div>
@@ -1198,6 +1814,24 @@ function PredictHazardsPage({ onBack, embed = false }) {
                           <span className="ml-1 text-green-600">No significant risk</span>
                         )}
                       </p>
+                    )}
+                    {routeResult.routeHazards && routeResult.routeHazards.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-gray-300">
+                        <p className="text-xs font-semibold text-[#004e89] mb-1">⚠️ Hazards Along Route ({routeResult.routeHazards.length}):</p>
+                        <ul className="space-y-1 max-h-20 overflow-y-auto">
+                          {routeResult.routeHazards.slice(0, 3).map((hazard, idx) => (
+                            <li key={hazard.id || idx} className="text-xs text-gray-600">
+                              <span className="font-semibold capitalize">{hazard.eventType || 'Hazard'}:</span>
+                              <span className="ml-1">{hazard.description?.substring(0, 40) || 'No description'}{hazard.description?.length > 40 ? '...' : ''}</span>
+                            </li>
+                          ))}
+                          {routeResult.routeHazards.length > 3 && (
+                            <li className="text-xs text-gray-500 italic">
+                              + {routeResult.routeHazards.length - 3} more hazards
+                            </li>
+                          )}
+                        </ul>
+                      </div>
                     )}
                     {routeResult.locations && routeResult.locations.length > 0 && (
                       <p className="text-xs"><span className="font-semibold">Locations:</span> {routeResult.locations.slice(0, 3).join(', ')}</p>
