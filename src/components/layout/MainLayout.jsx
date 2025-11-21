@@ -8,7 +8,7 @@ import { analyzeTextWithWatson, isWatsonNLUConfigured } from '../../utils/watson
 // Placeholder pages
 function HazardMapEmbedded() {
   return (
-    <div className="p-6 h-full">
+    <div className="p-4 h-full">
       <div className="h-full">
         <HazardMapPage embed={true} />
       </div>
@@ -18,7 +18,7 @@ function HazardMapEmbedded() {
 
 function PredictHazardsEmbedded() {
   return (
-    <div className="p-6 h-full">
+    <div className="p-4 h-full">
       <div className="h-full">
         <PredictHazardsPage embed={true} />
       </div>
@@ -125,7 +125,7 @@ function ReportHazardPlaceholder() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
         <h1 className="text-2xl md:text-3xl font-extrabold text-[#004e89]">Report a Hazard</h1>
         <div className="w-16" />
@@ -221,7 +221,7 @@ function ReportHazardPlaceholder() {
 
 function SafetyResourcesPlaceholder() {
   return (
-    <div className="p-6">
+    <div className="p-4">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-2">
         <h1 className="text-2xl md:text-3xl font-extrabold text-[#004e89]">Safety Resources</h1>
         <div className="w-16" />

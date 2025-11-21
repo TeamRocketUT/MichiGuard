@@ -192,7 +192,7 @@ export default function LiveWeatherAlerts({ embed = false }) {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4">
       {/* Inline error/notice */}
       {error && (
         <div className="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
