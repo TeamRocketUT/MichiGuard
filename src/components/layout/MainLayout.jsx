@@ -5,14 +5,13 @@ import PredictHazardsPage from '../PredictHazardsPage'
 import LiveWeatherAlerts from '../LiveWeatherAlerts'
 import ReportHazardPage from '../ReportHazardPage'
 import SafetyResourcesPage from '../SafetyResourcesPage'
-import MobilePreview from '../MobilePreview'
 
 // Placeholder pages
-function HazardMapEmbedded({ mobilePreview = false }) {
+function HazardMapEmbedded() {
   return (
-    <div className={mobilePreview ? 'p-2 h-full' : 'p-4 h-full'}>
+    <div className="p-4 h-full">
       <div className="h-full">
-        <HazardMapPage embed={true} mobilePreview={mobilePreview} />
+        <HazardMapPage embed={true} />
       </div>
     </div>
   )
@@ -38,7 +37,7 @@ function MainLayout({ initialSection = 'hazard', onHome, mobile = false, embedde
   let content = null
   switch (active) {
     case 'hazard':
-      content = <HazardMapEmbedded mobilePreview={mobile} />
+      content = <HazardMapEmbedded />
       break
     case 'predict':
       content = <PredictHazardsEmbedded />
@@ -51,13 +50,6 @@ function MainLayout({ initialSection = 'hazard', onHome, mobile = false, embedde
       break
     case 'resources':
       content = <SafetyResourcesPage embed={true} />
-      break
-    case 'mobile':
-      content = (
-        <div className="p-4 h-full flex items-center justify-center">
-          <MobilePreview />
-        </div>
-      )
       break
     default:
       content = <HazardMapEmbedded />
