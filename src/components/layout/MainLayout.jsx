@@ -3,14 +3,16 @@ import Sidebar from './Sidebar'
 import HazardMapPage from '../HazardMapPage'
 import PredictHazardsPage from '../PredictHazardsPage'
 import LiveWeatherAlerts from '../LiveWeatherAlerts'
-import { analyzeTextWithWatson, isWatsonNLUConfigured } from '../../utils/watsonNLU'
+import ReportHazardPage from '../ReportHazardPage'
+import SafetyResourcesPage from '../SafetyResourcesPage'
+import MobilePreview from '../MobilePreview'
 
 // Placeholder pages
-function HazardMapEmbedded() {
+function HazardMapEmbedded({ mobilePreview = false }) {
   return (
-    <div className="p-4 h-full">
+    <div className={mobilePreview ? 'p-2 h-full' : 'p-4 h-full'}>
       <div className="h-full">
-        <HazardMapPage embed={true} />
+        <HazardMapPage embed={true} mobilePreview={mobilePreview} />
       </div>
     </div>
   )
@@ -30,214 +32,13 @@ function WeatherAlertsPlaceholder() {
   return <LiveWeatherAlerts embed={true} />
 }
 
-function ReportHazardPlaceholder() {
-  const [location, setLocation] = useState('')
-  const [hazardType, setHazardType] = useState('Pothole')
-  const [description, setDescription] = useState('')
-  const [analyzing, setAnalyzing] = useState(false)
-  const [analysis, setAnalysis] = useState(null)
-  const [submitted, setSubmitted] = useState(false)
-
-  // Auto-analyze description with Watson NLU when user types
-  const handleDescriptionChange = async (e) => {
-    const value = e.target.value
-    setDescription(value)
-
-    // Debounce: analyze after user stops typing for 1 second
-    if (value.trim().length > 10) {
-      setAnalyzing(true)
-      setTimeout(async () => {
-        const result = await analyzeTextWithWatson(value)
-        if (result) {
-          // Extract entities (locations, hazard types)
-          const entities = result.entities || []
-          const keywords = result.keywords || []
-          const sentiment = result.sentiment?.document || {}
-
-          // Find location entities
-          const locationEntities = entities.filter(e => 
-            e.type === 'Location' || e.type === 'GeographicFeature' || e.type === 'Organization'
-          )
-
-          // Find hazard-related keywords
-          const hazardKeywords = keywords.filter(k => {
-            const text = k.text.toLowerCase()
-            return text.includes('ice') || text.includes('flood') || text.includes('pothole') || 
-                   text.includes('accident') || text.includes('snow') || text.includes('water') ||
-                   text.includes('danger') || text.includes('hazard')
-          })
-
-          setAnalysis({
-            entities: locationEntities,
-            keywords: hazardKeywords,
-            sentiment: sentiment,
-            suggestedLocation: locationEntities[0]?.text || null,
-            suggestedType: hazardKeywords[0]?.text || null
-          })
-
-          // Auto-fill location if found
-          if (locationEntities.length > 0 && !location) {
-            setLocation(locationEntities[0].text)
-          }
-
-          // Auto-suggest hazard type
-          if (hazardKeywords.length > 0) {
-            const keyword = hazardKeywords[0].text.toLowerCase()
-            if (keyword.includes('ice') || keyword.includes('snow')) {
-              setHazardType('Ice')
-            } else if (keyword.includes('flood') || keyword.includes('water')) {
-              setHazardType('Flood')
-            } else if (keyword.includes('pothole')) {
-              setHazardType('Pothole')
-            } else if (keyword.includes('accident') || keyword.includes('crash')) {
-              setHazardType('Accident')
-            }
-          }
-        }
-        setAnalyzing(false)
-      }, 1000)
-    } else {
-      setAnalysis(null)
-    }
-  }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setSubmitted(true)
-    
-    // Final analysis on submit
-    if (description.trim()) {
-      const result = await analyzeTextWithWatson(description)
-      if (result) {
-        console.log('Final Watson NLU Analysis:', result)
-      }
-    }
-
-    // In a real app, submit to backend
-    setTimeout(() => {
-      alert('Hazard report submitted! (This is a demo - Watson NLU analysis logged to console)')
-      setLocation('')
-      setHazardType('Pothole')
-      setDescription('')
-      setAnalysis(null)
-      setSubmitted(false)
-    }, 500)
-  }
-
-  return (
-    <div className="p-4">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-        <h1 className="text-2xl md:text-3xl font-extrabold text-[#004e89]">Report a Hazard</h1>
-        <div className="w-16" />
-      </div>
-      
-      {!isWatsonNLUConfigured() && (
-        <div className="mb-4 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg px-4 py-3 text-sm">
-          <p className="font-semibold mb-1">Watson NLU Setup Required</p>
-          <p>Add <code className="bg-yellow-100 px-1 rounded">VITE_WATSON_NLU_API_KEY</code> and <code className="bg-yellow-100 px-1 rounded">VITE_WATSON_NLU_URL</code> to your <code className="bg-yellow-100 px-1 rounded">.env</code> file to enable AI-powered analysis.</p>
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 shadow p-4 max-w-lg space-y-3">
-        <div>
-          <label className="block text-sm font-semibold text-[#004e89]">Location</label>
-          <input 
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            className="mt-1 w-full border-2 border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-michigan-gold" 
-            placeholder="Address or coordinates" 
-          />
-          {analysis?.suggestedLocation && !location && (
-            <p className="mt-1 text-xs text-blue-600">
-              💡 AI detected location: <button type="button" onClick={() => setLocation(analysis.suggestedLocation)} className="underline font-semibold">{analysis.suggestedLocation}</button>
-            </p>
-          )}
-        </div>
-        <div>
-          <label className="block text-sm font-semibold text-[#004e89]">Type</label>
-          <select 
-            value={hazardType}
-            onChange={(e) => setHazardType(e.target.value)}
-            className="mt-1 w-full border-2 border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-michigan-gold"
-          >
-            <option>Pothole</option>
-            <option>Flood</option>
-            <option>Accident</option>
-            <option>Ice</option>
-          </select>
-          {analysis?.suggestedType && (
-            <p className="mt-1 text-xs text-blue-600">
-              💡 AI suggested: {analysis.suggestedType}
-            </p>
-          )}
-        </div>
-        <div>
-          <label className="block text-sm font-semibold text-[#004e89]">
-            Description
-            {analyzing && <span className="ml-2 text-xs text-gray-500">(Analyzing with Watson NLU...)</span>}
-          </label>
-          <textarea 
-            value={description}
-            onChange={handleDescriptionChange}
-            className="mt-1 w-full border-2 border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-michigan-gold" 
-            rows="3" 
-            placeholder="Describe the hazard (AI will auto-detect location and type)" 
-          />
-          
-          {/* Watson NLU Analysis Results */}
-          {analysis && !analyzing && (
-            <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md text-xs">
-              <p className="font-semibold text-[#004e89] mb-2">🤖 AI Analysis:</p>
-              {analysis.sentiment && (
-                <p className="mb-1">
-                  <span className="font-semibold">Sentiment:</span> {analysis.sentiment.label} 
-                  {analysis.sentiment.score && ` (${(Math.abs(analysis.sentiment.score) * 100).toFixed(0)}% confidence)`}
-                </p>
-              )}
-              {analysis.entities.length > 0 && (
-                <p className="mb-1">
-                  <span className="font-semibold">Detected Locations:</span> {analysis.entities.map(e => e.text).join(', ')}
-                </p>
-              )}
-              {analysis.keywords.length > 0 && (
-                <p>
-                  <span className="font-semibold">Key Terms:</span> {analysis.keywords.slice(0, 3).map(k => k.text).join(', ')}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-        <button 
-          type="submit" 
-          disabled={submitted}
-          className="bg-[#004e89] text-white font-semibold px-4 py-2 rounded-md hover:bg-[#004e89] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {submitted ? 'Submitting...' : 'Submit'}
-        </button>
-      </form>
-    </div>
-  )
-}
-
-function SafetyResourcesPlaceholder() {
-  return (
-    <div className="p-4">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-2">
-        <h1 className="text-2xl md:text-3xl font-extrabold text-[#004e89]">Safety Resources</h1>
-        <div className="w-16" />
-      </div>
-      <p className="text-gray-700">Links and guidance coming soon.</p>
-    </div>
-  )
-}
-
-function MainLayout({ initialSection = 'hazard', onHome }) {
+function MainLayout({ initialSection = 'hazard', onHome, mobile = false, embedded = false }) {
   const [active, setActive] = useState(initialSection)
 
   let content = null
   switch (active) {
     case 'hazard':
-      content = <HazardMapEmbedded />
+      content = <HazardMapEmbedded mobilePreview={mobile} />
       break
     case 'predict':
       content = <PredictHazardsEmbedded />
@@ -246,15 +47,79 @@ function MainLayout({ initialSection = 'hazard', onHome }) {
       content = <WeatherAlertsPlaceholder />
       break
     case 'report':
-      content = <ReportHazardPlaceholder />
+      content = <ReportHazardPage embed={true} />
       break
     case 'resources':
-      content = <SafetyResourcesPlaceholder />
+      content = <SafetyResourcesPage embed={true} />
+      break
+    case 'mobile':
+      content = (
+        <div className="p-4 h-full flex items-center justify-center">
+          <MobilePreview />
+        </div>
+      )
       break
     default:
       content = <HazardMapEmbedded />
   }
 
+  if (mobile) {
+    // Mobile embedded layout (for phone frame): vertical stack + bottom nav
+    const mobileItems = [
+      { key: 'hazard', label: 'Map', icon: (
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+          <path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+        </svg>
+      )},
+      { key: 'predict', label: 'Predict', icon: (
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c0 .65.26 1.27.73 1.73.46.47 1.08.74 1.73.74H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+        </svg>
+      )},
+      { key: 'weather', label: 'Weather', icon: (
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+          <path d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+        </svg>
+      )},
+      { key: 'report', label: 'Report', icon: (
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+          <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+      )},
+      { key: 'resources', label: 'Resources', icon: (
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+          <path d="M4 19.5A2.5 2.5 0 006.5 22h11a2.5 2.5 0 002.5-2.5V6a2 2 0 00-2-2h-11a2 2 0 00-2 2z" />
+        </svg>
+      )}
+    ]
+
+    return (
+      <div className="flex flex-col h-full w-full bg-[#cbeef3]">
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {content}
+        </div>
+        <nav className="grid grid-cols-5 bg-[#004e89] text-white border-t border-[#004e89]/40">
+          {mobileItems.map(mi => {
+            const activeMi = active === mi.key
+            return (
+              <button
+                key={mi.key}
+                onClick={() => setActive(mi.key)}
+                className={`flex flex-col items-center justify-center py-1.5 text-[9px] font-semibold gap-0.5 transition ${activeMi ? 'bg-michigan-gold text-[#004e89]' : 'hover:bg-white/10'}`}
+                title={mi.label}
+              >
+                <span className={`h-6 w-6 flex items-center justify-center rounded-md ${activeMi ? 'bg-white text-[#004e89]' : 'bg-white/10'}`}>{mi.icon}</span>
+                <span className="truncate w-full text-center">{mi.label}</span>
+              </button>
+            )
+          })}
+        </nav>
+      </div>
+    )
+  }
+
+  // Desktop / full layout
   return (
     <div className="h-screen w-screen flex bg-[#cbeef3]">
       <Sidebar activeKey={active} onNavigate={setActive} onHome={onHome} />
