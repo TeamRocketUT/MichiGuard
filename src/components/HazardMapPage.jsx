@@ -14,9 +14,8 @@ const HAZARD_COLORS = {
   flood: '#4ECDC4'
 }
 
-// Google Maps API Key now sourced from Vite environment variable.
-// Create a .env.local file at project root with:
-// VITE_GOOGLE_MAPS_API_KEY=YOUR_REAL_KEY_HERE
+// Google Maps API Key loaded from .env
+// Add to .env: VITE_GOOGLE_MAPS_API_KEY=your_api_key
 // Required APIs: Maps JavaScript API, Places API, Directions API, Geocoding API (optional), Distance Matrix (optional)
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
 
@@ -49,7 +48,7 @@ function HazardMapPage({ onBack, embed = false }) {
   // Load Google Maps Script
   useEffect(() => {
     if (!GOOGLE_MAPS_API_KEY) {
-      setError('Google Maps API key missing. Add VITE_GOOGLE_MAPS_API_KEY to .env.local and restart dev server.')
+      setError('Google Maps API key missing. Add VITE_GOOGLE_MAPS_API_KEY to .env and restart dev server.')
       setLoading(false)
       return
     }
@@ -499,7 +498,7 @@ function HazardMapPage({ onBack, embed = false }) {
                 </li>
                 <li>Create an API key in Credentials</li>
                 <li>Set up billing (required for Maps API)</li>
-                <li>Add the API key to HazardMapPage.jsx</li>
+                <li>Add the API key to .env as VITE_GOOGLE_MAPS_API_KEY</li>
               </ol>
             </div>
             <p className="text-xs text-gray-500">

@@ -1,11 +1,54 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { analyzeTextWithWatson, isWatsonNLUConfigured } from '../utils/watsonNLU'
 
-// Placeholder: fake IBM Weather Company endpoint base (unused, for future wiring)
-const IBM_WEATHER_ALERTS_URL = 'https://api.weather.company.ibm.fake/alerts'
-
-// Watsonx.ai placeholder — returns the original text for now
+// Enhanced alert summarization using Watson NLU
 async function summarizeAlert(alertText) {
+  if (!alertText) return alertText
+
+  // If Watson NLU is not configured, return original text
+  if (!isWatsonNLUConfigured()) {
   return alertText
+  }
+
+  try {
+    const analysis = await analyzeTextWithWatson(alertText, {
+      features: {
+        keywords: {
+          limit: 5,
+          sentiment: true
+        },
+        sentiment: {},
+        categories: {}
+      }
+    })
+    if (!analysis) return alertText
+
+    // Extract key information from Watson NLU analysis
+    const keywords = analysis.keywords || []
+    const sentiment = analysis.sentiment?.document || {}
+    const categories = analysis.categories || []
+
+    // Build a concise summary using key terms
+    if (keywords.length > 0) {
+      const keyTerms = keywords.slice(0, 3).map(k => k.text).join(', ')
+      const sentimentLabel = sentiment.label || 'neutral'
+      
+      // Create a more concise summary
+      let summary = alertText
+      
+      // If the alert is long, try to create a shorter version
+      if (alertText.length > 150) {
+        summary = `${keyTerms}. ${sentimentLabel === 'negative' ? '⚠️ ' : ''}${alertText.substring(0, 120)}...`
+      }
+      
+      return summary
+    }
+
+    return alertText
+  } catch (error) {
+    console.error('Error summarizing alert with Watson NLU:', error)
+    return alertText
+  }
 }
 
 // Dummy alerts — in a real app, shape should mirror the API response
