@@ -20,7 +20,7 @@ const HAZARD_COLORS = {
 // Required APIs: Maps JavaScript API, Places API, Directions API, Geocoding API (optional), Distance Matrix (optional)
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
 
-function HazardMapPage({ onBack }) {
+function HazardMapPage({ onBack, embed = false }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const markersRef = useRef([])
@@ -60,7 +60,8 @@ function HazardMapPage({ onBack }) {
     }
 
     const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places,geometry`
+    // Load superset of libraries so other pages (e.g., heatmaps) work too
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places,geometry,visualization`
     script.async = true
     script.defer = true
     
@@ -214,7 +215,7 @@ function HazardMapPage({ onBack }) {
         map: map,
         suppressMarkers: false,
         polylineOptions: {
-          strokeColor: '#FFCB05',
+          strokeColor: '#f6bd60',
           strokeWeight: 6,
           strokeOpacity: 0.8
         }
@@ -363,13 +364,13 @@ function HazardMapPage({ onBack }) {
           scale: 16,
           fillColor: HAZARD_COLORS[hazard.type],
           fillOpacity: 1,
-          strokeColor: '#FFCB05',
+          strokeColor: '#f6bd60',
           strokeWeight: 5
         })
         marker.setAnimation(window.google.maps.Animation.BOUNCE)
         // Add pulsating circle overlay
         const circle = new window.google.maps.Circle({
-          strokeColor: '#FFCB05',
+          strokeColor: '#f6bd60',
           strokeOpacity: 0.7,
           strokeWeight: 2,
           fillColor: HAZARD_COLORS[hazard.type],
@@ -462,20 +463,22 @@ function HazardMapPage({ onBack }) {
 
   if (error) {
     return (
-      <div className="fixed inset-0 flex flex-col bg-gray-100">
-        <div className="bg-[#00274C] text-white px-4 py-3 flex items-center justify-between shadow-lg z-20">
-          <button
-            onClick={onBack}
-            className="flex items-center space-x-2 hover:text-[#FFCB05] transition-colors"
-          >
-            <svg className="h-6 w-6" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
-              <path d="M15 19l-7-7 7-7"></path>
-            </svg>
-            <span className="font-semibold">Back</span>
-          </button>
-          <h1 className="text-xl font-bold">Hazard Map</h1>
-          <div className="w-16"></div>
-        </div>
+      <div className={`${embed ? 'relative h-full' : 'fixed inset-0'} flex flex-col bg-gray-100`}>
+        {!embed && (
+          <div className="bg-[#00274C] text-white px-4 py-3 flex items-center justify-between shadow-lg z-20">
+            <button
+              onClick={onBack}
+              className="flex items-center space-x-2 hover:text-michigan-gold transition-colors"
+            >
+              <svg className="h-6 w-6" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+                <path d="M15 19l-7-7 7-7"></path>
+              </svg>
+              <span className="font-semibold">Back</span>
+            </button>
+            <h1 className="text-xl font-bold">Hazard Map</h1>
+            <div className="w-16"></div>
+          </div>
+        )}
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl p-8 max-w-lg text-center">
             <div className="text-6xl mb-4">🗺️</div>
@@ -509,28 +512,30 @@ function HazardMapPage({ onBack }) {
   }
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-gray-100">
-      {/* Header */}
-      <div className="bg-[#00274C] text-white px-4 py-3 flex items-center justify-between shadow-lg z-20">
-        <button
-          onClick={onBack}
-          className="flex items-center space-x-2 hover:text-[#FFCB05] transition-colors"
-        >
-          <svg className="h-6 w-6" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
-            <path d="M15 19l-7-7 7-7"></path>
-          </svg>
-          <span className="font-semibold">Back</span>
-        </button>
-        <h1 className="text-xl font-bold">Hazard Map</h1>
-        <div className="flex items-center space-x-2">
+    <div className={`${embed ? 'relative h-full min-h-[520px] rounded-xl overflow-hidden' : 'fixed inset-0'} flex flex-col bg-gray-100`}>
+      {/* Header (hidden in embed mode; layout provides its own header) */}
+      {!embed && (
+        <div className="bg-[#00274C] text-white px-4 py-3 flex items-center justify-between shadow-lg z-20">
           <button
-            onClick={toggleHazards}
-            className="px-3 py-1 rounded-md text-sm font-semibold bg-[#FFCB05] text-[#00274C] hover:bg-yellow-400 transition-colors"
+            onClick={onBack}
+            className="flex items-center space-x-2 hover:text-michigan-gold transition-colors"
           >
-            {showHazards ? 'Hide Hazards' : 'Show Hazards'}
+            <svg className="h-6 w-6" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+              <path d="M15 19l-7-7 7-7"></path>
+            </svg>
+            <span className="font-semibold">Back</span>
           </button>
+          <h1 className="text-xl font-bold">Hazard Map</h1>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={toggleHazards}
+              className="px-3 py-1 rounded-md text-sm font-semibold bg-michigan-gold text-[#00274C] hover:brightness-95 transition"
+            >
+              {showHazards ? 'Hide Hazards' : 'Show Hazards'}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Search Bar */}
       <div className="bg-white shadow-md p-4 z-10">
@@ -540,12 +545,12 @@ function HazardMapPage({ onBack }) {
               ref={searchInputRef}
               type="text"
               placeholder="Search for destination..."
-              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-[#FFCB05] focus:outline-none text-gray-700"
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-michigan-gold focus:outline-none text-gray-700"
             />
           </div>
           <button
             onClick={handleSearchClick}
-            className="px-5 rounded-lg bg-[#FFCB05] text-[#00274C] font-semibold hover:bg-yellow-400 transition-colors flex items-center justify-center shadow-md"
+            className="px-5 rounded-lg bg-michigan-gold text-[#00274C] font-semibold hover:brightness-95 transition flex items-center justify-center shadow-md"
             title="Search"
           >
             <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
@@ -608,7 +613,7 @@ function HazardMapPage({ onBack }) {
               {directionsResult.routes[0].legs[0].steps.map((s, idx) => (
                 <li
                   key={idx}
-                  className={`p-2 rounded-md border ${idx === currentStepIndex ? 'bg-[#FFCB05] border-[#FFCB05] text-[#00274C] font-semibold' : 'bg-gray-50'} transition-colors`}
+                  className={`p-2 rounded-md border ${idx === currentStepIndex ? 'bg-michigan-gold border-michigan-gold text-[#00274C] font-semibold' : 'bg-gray-50'} transition-colors`}
                   dangerouslySetInnerHTML={{ __html: s.instructions }}
                 />
               ))}

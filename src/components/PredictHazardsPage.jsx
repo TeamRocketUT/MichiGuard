@@ -15,7 +15,7 @@ async function getHazardPrediction(data) {
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
 
-function PredictHazardsPage({ onBack }) {
+function PredictHazardsPage({ onBack, embed = false }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const heatmapLayerRef = useRef(null)
@@ -106,17 +106,26 @@ function PredictHazardsPage({ onBack }) {
   }
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-gray-100 overflow-y-auto">
+    <div className={`${embed ? 'relative h-full rounded-xl overflow-hidden' : 'fixed inset-0'} flex flex-col bg-gray-100 overflow-y-auto`}>
       {/* Header */}
       <div className="bg-[#00274C] text-white px-4 py-4 shadow flex items-center justify-between">
-        <button onClick={onBack} className="flex items-center space-x-2 hover:text-[#FFCB05] transition-colors">
-          <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-            <path d="M15 19l-7-7 7-7" />
-          </svg>
-          <span className="font-semibold">Back</span>
-        </button>
-        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Predict Road Hazards</h1>
-        <div className="w-16" />
+        {!embed ? (
+          <>
+            <button onClick={onBack} className="flex items-center space-x-2 hover:text-michigan-gold transition-colors">
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <path d="M15 19l-7-7 7-7" />
+              </svg>
+              <span className="font-semibold">Back</span>
+            </button>
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Predict Road Hazards</h1>
+            <div className="w-16" />
+          </>
+        ) : (
+          <>
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Predict Road Hazards</h1>
+            <div className="w-16" />
+          </>
+        )}
       </div>
 
       <div className="px-4 pt-6 pb-16 max-w-6xl mx-auto w-full">
@@ -146,7 +155,7 @@ function PredictHazardsPage({ onBack }) {
             id="hazardType"
             value={selectedHazard}
             onChange={(e) => setSelectedHazard(e.target.value)}
-            className="bg-white border-2 border-[#00274C] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#FFCB05] w-full sm:w-64"
+            className="bg-white border-2 border-[#00274C] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-michigan-gold w-full sm:w-64"
           >
             <option>Icy Roads</option>
             <option>Flood Risk</option>
@@ -190,7 +199,7 @@ function PredictHazardsPage({ onBack }) {
             <div className="group bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden transition hover:shadow-xl">
               <div className="bg-[#00274C] text-white px-4 py-3 flex items-center justify-between">
                 <h3 className="font-bold text-sm tracking-wide">AI-Generated Insights</h3>
-                <span className="text-[10px] font-semibold bg-[#FFCB05] text-[#00274C] px-2 py-1 rounded">Beta</span>
+                <span className="text-[10px] font-semibold bg-michigan-gold text-[#00274C] px-2 py-1 rounded">Beta</span>
               </div>
               <div className="p-4 text-sm text-gray-700 leading-relaxed">
                 <p className="mb-2">There is a <span className="font-bold">68%</span> chance of icy road conditions near <span className="font-semibold">Ann Arbor</span> between <span className="font-semibold">5–7 PM</span>.</p>
@@ -199,7 +208,7 @@ function PredictHazardsPage({ onBack }) {
               <div className="px-4 pb-4">
                 <button
                   onClick={() => setShowExplain(prev => !prev)}
-                  className="mt-2 text-xs font-semibold bg-[#FFCB05] text-[#00274C] px-3 py-2 rounded-md shadow hover:bg-yellow-400 transition-colors"
+                  className="mt-2 text-xs font-semibold bg-michigan-gold text-[#00274C] px-3 py-2 rounded-md shadow hover:brightness-95 transition"
                 >
                   {showExplain ? 'Hide Explanation' : 'Explain This Prediction'}
                 </button>
@@ -254,7 +263,7 @@ function PredictHazardsPage({ onBack }) {
                   value={routeStart}
                   onChange={(e) => setRouteStart(e.target.value)}
                   placeholder="e.g. Detroit, MI"
-                  className="border-2 border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[#FFCB05]"
+                  className="border-2 border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-michigan-gold"
                 />
               </div>
               <div className="flex flex-col space-y-1">
@@ -264,12 +273,12 @@ function PredictHazardsPage({ onBack }) {
                   value={routeDest}
                   onChange={(e) => setRouteDest(e.target.value)}
                   placeholder="e.g. Ann Arbor, MI"
-                  className="border-2 border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[#FFCB05]"
+                  className="border-2 border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-michigan-gold"
                 />
               </div>
               <button
                 type="submit"
-                className="w-full bg-[#FFCB05] text-[#00274C] font-semibold py-2 rounded-md shadow hover:bg-yellow-400 transition-colors text-sm"
+                className="w-full bg-michigan-gold text-[#00274C] font-semibold py-2 rounded-md shadow hover:brightness-95 transition text-sm"
               >
                 Evaluate Risk
               </button>
