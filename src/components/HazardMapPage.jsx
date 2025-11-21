@@ -259,6 +259,18 @@ function HazardMapPage({ onBack, embed = false }) {
   // Removed demo hazards toggle; always using live MDOT feed
   const [routeError, setRouteError] = useState(null)
   const [pendingAddress, setPendingAddress] = useState(null)
+  const [isNavigating, setIsNavigating] = useState(false)
+  const [eta, setEta] = useState(null) // minutes
+  const [remainingDistance, setRemainingDistance] = useState(null) // km
+  const [navSpeedKmh, setNavSpeedKmh] = useState(null)
+  const [navError, setNavError] = useState(null)
+  const [routeInstructions, setRouteInstructions] = useState([])
+  const geoWatchIdRef = useRef(null)
+  const lastPositionRef = useRef(null)
+  const lastUpdateTimeRef = useRef(null)
+  const [currentStepIndex, setCurrentStepIndex] = useState(0)
+  const [isOffRoute, setIsOffRoute] = useState(false)
+  const recentSpeedsRef = useRef([])
 
   // Load Google Maps Script
   useEffect(() => {
@@ -517,7 +529,24 @@ function HazardMapPage({ onBack, embed = false }) {
         route = await getGoogleDirections(userLocation, dest)
       }
       console.log(`✅ Using ${routeSource} route; points: ${route.geometry.length}`)
+      
+      // Calculate ETA, distance, speed, and extract instructions
+      if (route.summary) {
+        const distanceKm = route.summary.distance / 1000
+        const durationMin = route.summary.duration / 60
+        setRemainingDistance(distanceKm.toFixed(2))
+        setEta(Math.round(durationMin))
+        setNavSpeedKmh((distanceKm / (durationMin / 60)).toFixed(1))
+      } else if (route._googleResult) {
+        const leg = route._googleResult.routes[0].legs[0]
+        const distKm = leg.distance.value / 1000
+        const durMin = leg.duration.value / 60
+        setRemainingDistance(distKm.toFixed(2))
+        setEta(Math.round(durMin))
+        setNavSpeedKmh((distKm / (durMin / 60)).toFixed(1))
+      }
       setRouteGeometry(route.geometry)
+      setRouteInstructions(extractInstructions(route))
       drawRoutePolyline(route.geometry)
       setRouteActive(true)
       // Fit bounds
@@ -581,7 +610,177 @@ function HazardMapPage({ onBack, embed = false }) {
     setShowHazards(v => !v)
   }
 
-  // Removed legacy navigation helpers (Google Directions based)
+  function computeRemainingDistanceFromPosition(position, routeCoords) {
+    if (!window.google || !Array.isArray(routeCoords) || routeCoords.length < 2) return null
+    const pos = new window.google.maps.LatLng(position.lat, position.lng)
+    let nearestIdx = 0
+    let minDist = Infinity
+    routeCoords.forEach(([lng, lat], i) => {
+      const d = window.google.maps.geometry.spherical.computeDistanceBetween(pos, new window.google.maps.LatLng(lat, lng))
+      if (d < minDist) { minDist = d; nearestIdx = i }
+    })
+    let remainingMeters = minDist
+    for (let i = nearestIdx; i < routeCoords.length - 1; i++) {
+      const a = new window.google.maps.LatLng(routeCoords[i][1], routeCoords[i][0])
+      const b = new window.google.maps.LatLng(routeCoords[i+1][1], routeCoords[i+1][0])
+      remainingMeters += window.google.maps.geometry.spherical.computeDistanceBetween(a, b)
+    }
+    return remainingMeters / 1000
+  }
+
+  function distanceFromRoute(position, routeCoords) {
+    if (!window.google || !Array.isArray(routeCoords) || routeCoords.length < 2) return Infinity
+    const pos = new window.google.maps.LatLng(position.lat, position.lng)
+    let minDist = Infinity
+    for (let i = 0; i < routeCoords.length; i++) {
+      const d = window.google.maps.geometry.spherical.computeDistanceBetween(pos, new window.google.maps.LatLng(routeCoords[i][1], routeCoords[i][0]))
+      if (d < minDist) minDist = d
+    }
+    return minDist
+  }
+
+  async function rerouteFromCurrentPosition(currentPos) {
+    if (!destination) return
+    try {
+      const destLatLng = destination // destination stored as string earlier? Ensure we have destinationLocationRef if needed
+      // If destination is text address, reuse geocodeAndRoute instead of direct
+      await fetchRouteAndHazards(new window.google.maps.LatLng(currentPos.lat, currentPos.lng))
+      setIsOffRoute(false)
+    } catch (e) {
+      setNavError('Reroute failed')
+    }
+  }
+
+  function extractInstructions(route) {
+    if (route?.segments && Array.isArray(route.segments)) {
+      const steps = route.segments.flatMap(seg => seg.steps || [])
+      return steps.map((s, idx) => ({
+        id: idx,
+        distance: s.distance,
+        duration: s.duration,
+        instruction: s.instruction,
+        wayPoints: s.way_points
+      }))
+    }
+    if (route?._googleResult?.routes?.[0]?.legs?.[0]?.steps) {
+      return route._googleResult.routes[0].legs[0].steps.map((st, idx) => ({
+        id: idx,
+        distance: st.distance.value,
+        duration: st.duration.value,
+        instruction: st.instructions?.replace(/<[^>]+>/g,'') || 'Continue',
+        end_location: st.end_location
+      }))
+    }
+    return []
+  }
+
+  function updateCurrentStep(currentPos) {
+    if (!routeInstructions.length || !window.google) return
+    let idx = currentStepIndex
+    for (let i = currentStepIndex; i < routeInstructions.length; i++) {
+      const step = routeInstructions[i]
+      let targetLatLng
+      if (step.end_location) {
+        targetLatLng = new window.google.maps.LatLng(step.end_location.lat(), step.end_location.lng())
+      } else if (Array.isArray(step.wayPoints)) {
+        const wpIndex = step.wayPoints[1] || step.wayPoints[0]
+        if (routeGeometry && routeGeometry[wpIndex]) {
+          targetLatLng = new window.google.maps.LatLng(routeGeometry[wpIndex][1], routeGeometry[wpIndex][0])
+        }
+      }
+      if (!targetLatLng) continue
+      const d = window.google.maps.geometry.spherical.computeDistanceBetween(new window.google.maps.LatLng(currentPos.lat, currentPos.lng), targetLatLng)
+      if (d < 80) {
+        idx = i + 1
+      } else {
+        break
+      }
+    }
+    setCurrentStepIndex(Math.min(idx, routeInstructions.length - 1))
+  }
+
+  const startNavigation = () => {
+    if (!routeActive || !destination || !userLocation) {
+      setRouteError('Select a destination before starting navigation.')
+      return
+    }
+    setNavError(null)
+    setIsNavigating(true)
+    lastPositionRef.current = userLocation
+    lastUpdateTimeRef.current = Date.now()
+    if ('geolocation' in navigator) {
+      geoWatchIdRef.current = navigator.geolocation.watchPosition(
+        pos => {
+          const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+          lastPositionRef.current = coords
+          if (userMarkerRef.current) userMarkerRef.current.setPosition(coords)
+          if (mapInstanceRef.current) mapInstanceRef.current.panTo(coords)
+          if (routeGeometry) {
+            const rem = computeRemainingDistanceFromPosition(coords, routeGeometry)
+            if (rem != null) {
+              setRemainingDistance(rem.toFixed(2))
+              const now = Date.now()
+              if (lastUpdateTimeRef.current) {
+                const dtSec = (now - lastUpdateTimeRef.current) / 1000
+                if (dtSec > 0) {
+                  const distFromRouteMeters = distanceFromRoute(coords, routeGeometry)
+                  const prevCoords = lastPositionRef.current
+                  if (prevCoords) {
+                    const movedMeters = window.google.maps.geometry.spherical.computeDistanceBetween(
+                      new window.google.maps.LatLng(prevCoords.lat, prevCoords.lng),
+                      new window.google.maps.LatLng(coords.lat, coords.lng)
+                    )
+                    const instSpeed = (movedMeters / dtSec) * 3.6
+                    if (!isNaN(instSpeed) && instSpeed > 1) {
+                      recentSpeedsRef.current.push(instSpeed)
+                      if (recentSpeedsRef.current.length > 5) recentSpeedsRef.current.shift()
+                      const avgSpeed = recentSpeedsRef.current.reduce((a,b)=>a+b,0)/recentSpeedsRef.current.length
+                      setNavSpeedKmh(avgSpeed.toFixed(1))
+                      const etaMin = (rem / avgSpeed) * 60
+                      setEta(Math.max(1, Math.round(etaMin)))
+                    }
+                  }
+                  if (distFromRouteMeters > 150) {
+                    if (!isOffRoute) setIsOffRoute(true)
+                  } else if (isOffRoute) {
+                    setIsOffRoute(false)
+                  }
+                  if (isOffRoute && distFromRouteMeters > 200) {
+                    rerouteFromCurrentPosition(coords)
+                  }
+                }
+                lastUpdateTimeRef.current = now
+              } else {
+                lastUpdateTimeRef.current = Date.now()
+              }
+            }
+            updateCurrentStep(coords)
+            if (rem !== null && rem < 0.05) {
+              stopNavigation(true)
+            }
+          }
+        },
+        err => {
+          setNavError('Geolocation error: ' + err.message)
+        },
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+      )
+    } else {
+      setNavError('Geolocation not supported by this browser.')
+    }
+  }
+
+  const stopNavigation = (arrived = false) => {
+    setIsNavigating(false)
+    if (geoWatchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(geoWatchIdRef.current)
+      geoWatchIdRef.current = null
+    }
+    if (arrived) {
+      setEta(0)
+      setRemainingDistance('0.00')
+    }
+  }
 
   if (error) {
     return (
@@ -664,6 +863,18 @@ function HazardMapPage({ onBack, embed = false }) {
             >
               {showHazards ? 'Hide Hazards' : 'Show Hazards'}
             </button>
+            {routeActive && (
+              <button
+                onClick={isNavigating ? () => stopNavigation(false) : startNavigation}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition shadow-md ${
+                  isNavigating 
+                    ? 'bg-red-500 text-white hover:bg-red-600' 
+                    : 'bg-green-600 text-white hover:bg-green-700'
+                }`}
+              >
+                {isNavigating ? 'Stop Nav' : 'Start Nav'}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -695,6 +906,51 @@ function HazardMapPage({ onBack, embed = false }) {
                 <h3 className="font-bold text-[#004e89] text-lg">Hazard Alert!</h3>
                 <p className="text-gray-600 text-sm">{filteredHazards.length} hazard{filteredHazards.length > 1 ? 's' : ''} detected</p>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* In-App Navigation Panel */}
+        {isNavigating && (
+          <div className="absolute top-20 left-4 right-4 md:left-auto md:right-4 md:w-96 bg-white/95 backdrop-blur rounded-xl shadow-xl p-4 z-10 border border-green-200">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-white font-bold">▶</span>
+                <span className="font-semibold text-[#004e89]">In-App Navigation</span>
+              </div>
+              <div className="text-xs text-gray-500">Speed: {navSpeedKmh || '—'} km/h</div>
+            </div>
+            <div className="grid grid-cols-3 gap-2 mb-3 text-sm">
+              <div className="bg-green-50 rounded-lg p-2 text-center">
+                <div className="text-[10px] uppercase text-green-700 font-medium">ETA</div>
+                <div className="font-bold text-green-800 text-lg">{eta ?? '—'}<span className="text-xs ml-0.5">min</span></div>
+              </div>
+              <div className="bg-green-50 rounded-lg p-2 text-center">
+                <div className="text-[10px] uppercase text-green-700 font-medium">Remain</div>
+                <div className="font-bold text-green-800 text-lg">{remainingDistance ?? '—'}<span className="text-xs ml-0.5">km</span></div>
+              </div>
+              <div className="bg-green-50 rounded-lg p-2 text-center">
+                <div className="text-[10px] uppercase text-green-700 font-medium">Step</div>
+                <div className="font-bold text-green-800 text-lg">{currentStepIndex + 1}/{routeInstructions.length}</div>
+              </div>
+            </div>
+            {navError && <div className="text-xs text-red-600 mb-2">{navError}</div>}
+            <div className="max-h-48 overflow-auto space-y-2 pr-1">
+              {routeInstructions.map((step, idx) => (
+                <div
+                  key={step.id}
+                  className={`text-xs rounded-md p-2 border ${idx === currentStepIndex ? 'bg-green-600 text-white border-green-600 shadow-md' : 'bg-gray-50 border-gray-200 text-gray-700'}`}
+                >
+                  <div className="font-medium truncate">{step.instruction}</div>
+                  <div className="mt-0.5 opacity-80 flex justify-between">
+                    <span>{(step.distance/1000).toFixed(2)} km</span>
+                    <span>{Math.round((step.duration || 0)/60)} min</span>
+                  </div>
+                </div>
+              ))}
+              {routeInstructions.length === 0 && (
+                <div className="text-xs text-gray-500">No turn-by-turn instructions available.</div>
+              )}
             </div>
           </div>
         )}
