@@ -27,6 +27,12 @@ const items = [
       <path d="M4 19.5A2.5 2.5 0 006.5 22h11a2.5 2.5 0 002.5-2.5V6a2 2 0 00-2-2h-11a2 2 0 00-2 2z" />
     </svg>
   )}
+  ,{ key: 'mobile', label: 'Mobile App Preview', icon: (
+    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+      <rect x="7" y="2" width="10" height="20" rx="2" />
+      <circle cx="12" cy="18" r="1" />
+    </svg>
+  )}
 ]
 
 function Sidebar({ activeKey, onNavigate, onHome }) {

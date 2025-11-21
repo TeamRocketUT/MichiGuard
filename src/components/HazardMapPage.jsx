@@ -238,7 +238,7 @@ function isPointNearRoute(point, routeCoordinates, thresholdMeters = 1609.34) { 
   return false
 }
 
-function HazardMapPage({ onBack, embed = false }) {
+function HazardMapPage({ onBack, embed = false, mobilePreview = false }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const userMarkerRef = useRef(null)
@@ -273,6 +273,7 @@ function HazardMapPage({ onBack, embed = false }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
   const [isOffRoute, setIsOffRoute] = useState(false)
   const recentSpeedsRef = useRef([])
+  const [showLegend, setShowLegend] = useState(false)
 
   // Load Google Maps Script
   useEffect(() => {
@@ -835,40 +836,40 @@ function HazardMapPage({ onBack, embed = false }) {
   }
 
   return (
-    <div className={`${embed ? 'relative h-full min-h-[520px] rounded-xl overflow-hidden' : 'fixed inset-0'} flex flex-col bg-transparent`}>
-      {/* Header row matching Live Weather Alerts (align with page padding) */}
+    <div className={`${embed ? 'relative h-full min-h-[520px] rounded-xl overflow-hidden' : 'fixed inset-0'} flex flex-col bg-transparent ${mobilePreview ? 'px-2 pt-2 pb-0 overflow-x-hidden' : ''}`}>
+      {/* Header row */}
       <div className="">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-          <h1 className="text-2xl md:text-3xl font-extrabold text-[#004e89]">Hazard Map</h1>
-          <div className="flex items-stretch gap-2 w-full md:w-auto">
-            <div className="flex-1 md:flex-none md:w-80">
+        <div className={`${mobilePreview ? 'flex flex-wrap items-start justify-between gap-2 mb-2' : 'flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4'}`}>
+          <h1 className={`${mobilePreview ? 'text-xl font-bold' : 'text-2xl md:text-3xl font-extrabold'} text-[#004e89] leading-tight`}>Hazard Map</h1>
+          <div className={`${mobilePreview ? 'flex flex-wrap w-full gap-2' : 'flex items-stretch gap-2 w-full md:w-auto'}`}>
+            <div className={`${mobilePreview ? 'flex-1 min-w-[160px]' : 'flex-1 md:flex-none md:w-80'}`}>
               <input
                 ref={searchInputRef}
                 type="text"
-                placeholder="Search for destination..."
-                className="w-full px-4 py-2 border-2 border-[#004e89] rounded-lg focus:outline-none focus:border-michigan-gold text-gray-700"
+                placeholder="Search destination..."
+                className={`w-full ${mobilePreview ? 'px-3 py-1.5 text-[13px]' : 'px-4 py-2'} border-2 border-[#004e89] rounded-lg focus:outline-none focus:border-michigan-gold text-gray-700`}
               />
             </div>
             <button
               onClick={handleSearchClick}
-              className="px-4 rounded-lg bg-michigan-gold text-[#004e89] font-semibold hover:brightness-95 transition flex items-center justify-center shadow-md"
+              className={`${mobilePreview ? 'px-3 py-1.5 text-xs' : 'px-4'} rounded-lg bg-michigan-gold text-[#004e89] font-semibold hover:brightness-95 transition flex items-center justify-center shadow-md`}
               title="Search"
             >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <svg className={`${mobilePreview ? 'h-4 w-4' : 'h-5 w-5'}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
                 <circle cx="11" cy="11" r="7" />
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
             </button>
             <button
               onClick={toggleHazards}
-              className="px-3 py-2 rounded-lg text-sm font-semibold bg-white text-[#004e89] border border-[#004e89]/20 hover:bg-gray-50 transition"
+              className={`${mobilePreview ? 'px-2.5 py-1.5 text-[11px]' : 'px-3 py-2 text-sm'} rounded-lg font-semibold bg-white text-[#004e89] border border-[#004e89]/20 hover:bg-gray-50 transition`}
             >
               {showHazards ? 'Hide Hazards' : 'Show Hazards'}
             </button>
             {routeActive && (
               <button
                 onClick={isNavigating ? () => stopNavigation(false) : startNavigation}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition shadow-md ${
+                className={`${mobilePreview ? 'px-3 py-1.5 text-[11px]' : 'px-4 py-2 text-sm'} rounded-lg font-semibold transition shadow-md ${
                   isNavigating 
                     ? 'bg-red-500 text-white hover:bg-red-600' 
                     : 'bg-green-600 text-white hover:bg-green-700'
@@ -885,7 +886,7 @@ function HazardMapPage({ onBack, embed = false }) {
       
 
       {/* Map Container */}
-      <div className="flex-1 relative">
+      <div className={`flex-1 relative ${mobilePreview ? 'mt-1' : ''}`}>
         <div ref={mapRef} className="absolute inset-0" />
         
         {loading && (
@@ -899,14 +900,14 @@ function HazardMapPage({ onBack, embed = false }) {
 
         {/* Hazard Alert Card */}
         {routeActive && filteredHazards.length > 0 && (
-          <div className="absolute top-4 left-4 right-4 md:left-auto md:right-4 md:w-80 bg-white rounded-xl shadow-2xl p-4 border-l-4 border-red-500 z-10">
+          <div className={`absolute ${mobilePreview ? 'top-2 left-2 right-2' : 'top-4 left-4 right-4 md:left-auto md:right-4 md:w-80'} bg-white rounded-xl shadow-2xl ${mobilePreview ? 'p-3' : 'p-4'} border-l-4 border-red-500 z-10`}>            
             <div className="flex items-start space-x-3">
-              <svg className="h-6 w-6 text-red-500 flex-shrink-0 mt-1" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className={`${mobilePreview ? 'h-5 w-5' : 'h-6 w-6'} text-red-500 flex-shrink-0 mt-1`} fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
                 <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
               </svg>
               <div>
-                <h3 className="font-bold text-[#004e89] text-lg">Hazard Alert!</h3>
-                <p className="text-gray-600 text-sm">{filteredHazards.length} hazard{filteredHazards.length > 1 ? 's' : ''} detected</p>
+                <h3 className={`font-bold text-[#004e89] ${mobilePreview ? 'text-sm' : 'text-lg'}`}>Hazard Alert!</h3>
+                <p className={`text-gray-600 ${mobilePreview ? 'text-[11px]' : 'text-sm'}`}>{filteredHazards.length} hazard{filteredHazards.length > 1 ? 's' : ''} detected</p>
               </div>
             </div>
           </div>
@@ -914,34 +915,34 @@ function HazardMapPage({ onBack, embed = false }) {
 
         {/* In-App Navigation Panel */}
         {isNavigating && (
-          <div className="absolute top-20 left-4 right-4 md:left-auto md:right-4 md:w-96 bg-white/95 backdrop-blur rounded-xl shadow-xl p-4 z-10 border border-green-200">
+          <div className={`absolute ${mobilePreview ? 'top-14 left-2 right-2' : 'top-20 left-4 right-4 md:left-auto md:right-4 md:w-96'} bg-white/95 backdrop-blur rounded-xl shadow-xl ${mobilePreview ? 'p-3' : 'p-4'} z-10 border border-green-200`}>            
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-white font-bold">▶</span>
-                <span className="font-semibold text-[#004e89]">In-App Navigation</span>
+                <span className={`${mobilePreview ? 'h-7 w-7 text-xs' : 'h-8 w-8'} inline-flex items-center justify-center rounded-full bg-green-600 text-white font-bold`}>▶</span>
+                <span className={`${mobilePreview ? 'text-xs' : ''} font-semibold text-[#004e89]`}>In-App Navigation</span>
               </div>
-              <div className="text-xs text-gray-500">Speed: {navSpeedKmh || '—'} km/h</div>
+              <div className={`${mobilePreview ? 'text-[10px]' : 'text-xs'} text-gray-500`}>Speed: {navSpeedKmh || '—'} km/h</div>
             </div>
-            <div className="grid grid-cols-3 gap-2 mb-3 text-sm">
+            <div className={`grid grid-cols-3 gap-2 mb-3 ${mobilePreview ? 'text-[11px]' : 'text-sm'}`}>
               <div className="bg-green-50 rounded-lg p-2 text-center">
-                <div className="text-[10px] uppercase text-green-700 font-medium">ETA</div>
-                <div className="font-bold text-green-800 text-lg">{eta ?? '—'}<span className="text-xs ml-0.5">min</span></div>
+                <div className={`${mobilePreview ? 'text-[9px]' : 'text-[10px]'} uppercase text-green-700 font-medium`}>ETA</div>
+                <div className={`font-bold text-green-800 ${mobilePreview ? 'text-base' : 'text-lg'}`}>{eta ?? '—'}<span className="text-xs ml-0.5">min</span></div>
               </div>
               <div className="bg-green-50 rounded-lg p-2 text-center">
-                <div className="text-[10px] uppercase text-green-700 font-medium">Remain</div>
-                <div className="font-bold text-green-800 text-lg">{remainingDistance ?? '—'}<span className="text-xs ml-0.5">km</span></div>
+                <div className={`${mobilePreview ? 'text-[9px]' : 'text-[10px]'} uppercase text-green-700 font-medium`}>Remain</div>
+                <div className={`font-bold text-green-800 ${mobilePreview ? 'text-base' : 'text-lg'}`}>{remainingDistance ?? '—'}<span className="text-xs ml-0.5">km</span></div>
               </div>
               <div className="bg-green-50 rounded-lg p-2 text-center">
-                <div className="text-[10px] uppercase text-green-700 font-medium">Step</div>
-                <div className="font-bold text-green-800 text-lg">{currentStepIndex + 1}/{routeInstructions.length}</div>
+                <div className={`${mobilePreview ? 'text-[9px]' : 'text-[10px]'} uppercase text-green-700 font-medium`}>Step</div>
+                <div className={`font-bold text-green-800 ${mobilePreview ? 'text-base' : 'text-lg'}`}>{currentStepIndex + 1}/{routeInstructions.length}</div>
               </div>
             </div>
-            {navError && <div className="text-xs text-red-600 mb-2">{navError}</div>}
-            <div className="max-h-48 overflow-auto space-y-2 pr-1">
+            {navError && <div className={`${mobilePreview ? 'text-[10px]' : 'text-xs'} text-red-600 mb-2`}>{navError}</div>}
+            <div className={`${mobilePreview ? 'max-h-40' : 'max-h-48'} overflow-auto space-y-2 pr-1`}>
               {routeInstructions.map((step, idx) => (
                 <div
                   key={step.id}
-                  className={`text-xs rounded-md p-2 border ${idx === currentStepIndex ? 'bg-green-600 text-white border-green-600 shadow-md' : 'bg-gray-50 border-gray-200 text-gray-700'}`}
+                  className={`${mobilePreview ? 'text-[11px]' : 'text-xs'} rounded-md p-2 border ${idx === currentStepIndex ? 'bg-green-600 text-white border-green-600 shadow-md' : 'bg-gray-50 border-gray-200 text-gray-700'}`}
                 >
                   <div className="font-medium truncate">{step.instruction}</div>
                   <div className="mt-0.5 opacity-80 flex justify-between">
@@ -951,57 +952,56 @@ function HazardMapPage({ onBack, embed = false }) {
                 </div>
               ))}
               {routeInstructions.length === 0 && (
-                <div className="text-xs text-gray-500">No turn-by-turn instructions available.</div>
+                <div className={`${mobilePreview ? 'text-[11px]' : 'text-xs'} text-gray-500`}>No turn-by-turn instructions available.</div>
               )}
             </div>
           </div>
         )}
 
         {/* Legend */}
-        <div className="absolute bottom-4 left-4 bg-white rounded-xl shadow-lg p-4 z-10 max-w-xs">
-          <h3 className="text-sm font-bold text-[#004e89] mb-3">Hazard Legend</h3>
-          <div className="space-y-2">
+        <div className={`absolute ${mobilePreview ? 'bottom-2 left-2' : 'bottom-4 left-4'} bg-white rounded-xl shadow-lg ${mobilePreview ? 'p-3' : 'p-4'} z-10 max-w-xs`}>
+          <h3 className={`${mobilePreview ? 'text-[11px] mb-2' : 'text-sm mb-3'} font-bold text-[#004e89]`}>Hazard Legend</h3>
+          <div className={`${mobilePreview ? 'space-y-1.5' : 'space-y-2'}`}>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: HAZARD_COLORS.accident }}></div>
-              <span className="text-xs text-gray-700">Accident</span>
+              <div className={`${mobilePreview ? 'w-3.5 h-3.5' : 'w-4 h-4'} rounded-full`} style={{ backgroundColor: HAZARD_COLORS.accident }}></div>
+              <span className={`${mobilePreview ? 'text-[10px]' : 'text-xs'} text-gray-700`}>Accident</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: HAZARD_COLORS.roadwork }}></div>
-              <span className="text-xs text-gray-700">Construction</span>
+              <div className={`${mobilePreview ? 'w-3.5 h-3.5' : 'w-4 h-4'} rounded-full`} style={{ backgroundColor: HAZARD_COLORS.roadwork }}></div>
+              <span className={`${mobilePreview ? 'text-[10px]' : 'text-xs'} text-gray-700`}>Construction</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: HAZARD_COLORS.closure }}></div>
-              <span className="text-xs text-gray-700">Closure</span>
+              <div className={`${mobilePreview ? 'w-3.5 h-3.5' : 'w-4 h-4'} rounded-full`} style={{ backgroundColor: HAZARD_COLORS.closure }}></div>
+              <span className={`${mobilePreview ? 'text-[10px]' : 'text-xs'} text-gray-700`}>Closure</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: HAZARD_COLORS.congestion }}></div>
-              <span className="text-xs text-gray-700">Congestion</span>
+              <div className={`${mobilePreview ? 'w-3.5 h-3.5' : 'w-4 h-4'} rounded-full`} style={{ backgroundColor: HAZARD_COLORS.congestion }}></div>
+              <span className={`${mobilePreview ? 'text-[10px]' : 'text-xs'} text-gray-700`}>Congestion</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: HAZARD_COLORS.weather }}></div>
-              <span className="text-xs text-gray-700">Weather</span>
+              <div className={`${mobilePreview ? 'w-3.5 h-3.5' : 'w-4 h-4'} rounded-full`} style={{ backgroundColor: HAZARD_COLORS.weather }}></div>
+              <span className={`${mobilePreview ? 'text-[10px]' : 'text-xs'} text-gray-700`}>Weather</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: HAZARD_COLORS.incident }}></div>
-              <span className="text-xs text-gray-700">Incident</span>
+              <div className={`${mobilePreview ? 'w-3.5 h-3.5' : 'w-4 h-4'} rounded-full`} style={{ backgroundColor: HAZARD_COLORS.incident }}></div>
+              <span className={`${mobilePreview ? 'text-[10px]' : 'text-xs'} text-gray-700`}>Incident</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: HAZARD_COLORS.other }}></div>
-              <span className="text-xs text-gray-700">Other</span>
+              <div className={`${mobilePreview ? 'w-3.5 h-3.5' : 'w-4 h-4'} rounded-full`} style={{ backgroundColor: HAZARD_COLORS.other }}></div>
+              <span className={`${mobilePreview ? 'text-[10px]' : 'text-xs'} text-gray-700`}>Other</span>
             </div>
           </div>
         </div>
-
         {/* (Turn-by-turn panel removed in TomTom version) */}
         {routeError && (
-          <div className="absolute bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-80 bg-white rounded-xl shadow-lg p-4 border-l-4 border-yellow-500 z-10">
+          <div className={`absolute ${mobilePreview ? 'bottom-2 left-2 right-2' : 'bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-80'} bg-white rounded-xl shadow-lg ${mobilePreview ? 'p-3' : 'p-4'} border-l-4 border-yellow-500 z-10`}>            
             <div className="flex items-start space-x-3">
-              <svg className="h-6 w-6 text-yellow-500 flex-shrink-0 mt-1" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className={`${mobilePreview ? 'h-5 w-5' : 'h-6 w-6'} text-yellow-500 flex-shrink-0 mt-1`} fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
                 <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
               </svg>
               <div>
-                <h3 className="font-bold text-[#004e89] text-lg">Route Issue</h3>
-                <p className="text-gray-600 text-sm">{routeError}</p>
+                <h3 className={`font-bold text-[#004e89] ${mobilePreview ? 'text-sm' : 'text-lg'}`}>Route Issue</h3>
+                <p className={`text-gray-600 ${mobilePreview ? 'text-[11px]' : 'text-sm'}`}>{routeError}</p>
               </div>
             </div>
           </div>
