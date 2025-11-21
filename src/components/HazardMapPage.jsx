@@ -247,7 +247,7 @@ function HazardMapPage({ onBack, embed = false }) {
       })
 
       const infoWindow = new window.google.maps.InfoWindow({
-        content: `<div style="padding: 8px; font-weight: bold; color: #00274C;">${hazard.title}</div>`
+        content: `<div style="padding: 8px; font-weight: bold; color: #004e89;">${hazard.title}</div>`
       })
 
       marker.addListener('click', () => {
@@ -465,7 +465,7 @@ function HazardMapPage({ onBack, embed = false }) {
     return (
       <div className={`${embed ? 'relative h-full' : 'fixed inset-0'} flex flex-col bg-gray-100`}>
         {!embed && (
-          <div className="bg-[#00274C] text-white px-4 py-3 flex items-center justify-between shadow-lg z-20">
+          <div className="bg-[#004e89] text-white px-4 py-3 flex items-center justify-between shadow-lg z-20">
             <button
               onClick={onBack}
               className="flex items-center space-x-2 hover:text-michigan-gold transition-colors"
@@ -482,10 +482,10 @@ function HazardMapPage({ onBack, embed = false }) {
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl p-8 max-w-lg text-center">
             <div className="text-6xl mb-4">🗺️</div>
-            <h2 className="text-2xl font-bold text-[#00274C] mb-4">Google Maps Setup Required</h2>
+            <h2 className="text-2xl font-bold text-[#004e89] mb-4">Google Maps Setup Required</h2>
             <p className="text-gray-600 mb-4">{error}</p>
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-left text-sm mb-4">
-              <p className="font-semibold text-[#00274C] mb-2">📝 Setup Instructions:</p>
+              <p className="font-semibold text-[#004e89] mb-2">📝 Setup Instructions:</p>
               <ol className="list-decimal list-inside space-y-2 text-gray-700">
                 <li>Go to <a href="https://console.cloud.google.com/google/maps-apis" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Google Cloud Console</a></li>
                 <li>Create a new project or select existing one</li>
@@ -512,70 +512,58 @@ function HazardMapPage({ onBack, embed = false }) {
   }
 
   return (
-    <div className={`${embed ? 'relative h-full min-h-[520px] rounded-xl overflow-hidden' : 'fixed inset-0'} flex flex-col bg-gray-100`}>
-      {/* Header (hidden in embed mode; layout provides its own header) */}
-      {!embed && (
-        <div className="bg-[#00274C] text-white px-4 py-3 flex items-center justify-between shadow-lg z-20">
-          <button
-            onClick={onBack}
-            className="flex items-center space-x-2 hover:text-michigan-gold transition-colors"
-          >
-            <svg className="h-6 w-6" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
-              <path d="M15 19l-7-7 7-7"></path>
-            </svg>
-            <span className="font-semibold">Back</span>
-          </button>
-          <h1 className="text-xl font-bold">Hazard Map</h1>
-          <div className="flex items-center space-x-2">
+    <div className={`${embed ? 'relative h-full min-h-[520px] rounded-xl overflow-hidden' : 'fixed inset-0'} flex flex-col bg-transparent`}>
+      {/* Header row matching Live Weather Alerts */}
+      <div className="px-4 pt-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+          <h1 className="text-2xl md:text-3xl font-extrabold text-[#004e89]">Hazard Map</h1>
+          <div className="flex items-stretch gap-2 w-full md:w-auto">
+            <div className="flex-1 md:flex-none md:w-80">
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder="Search for destination..."
+                className="w-full px-4 py-2 border-2 border-[#004e89] rounded-lg focus:outline-none focus:border-michigan-gold text-gray-700"
+              />
+            </div>
+            <button
+              onClick={handleSearchClick}
+              className="px-4 rounded-lg bg-michigan-gold text-[#004e89] font-semibold hover:brightness-95 transition flex items-center justify-center shadow-md"
+              title="Search"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="7" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </button>
             <button
               onClick={toggleHazards}
-              className="px-3 py-1 rounded-md text-sm font-semibold bg-michigan-gold text-[#00274C] hover:brightness-95 transition"
+              className="px-3 py-2 rounded-lg text-sm font-semibold bg-white text-[#004e89] border border-[#004e89]/20 hover:bg-gray-50 transition"
             >
               {showHazards ? 'Hide Hazards' : 'Show Hazards'}
             </button>
+            {routeActive && !navigating && (
+              <button
+                onClick={startNavigation}
+                className="px-4 py-2 rounded-lg bg-[#004e89] text-white font-semibold hover:bg-[#004e89] transition-colors shadow-md"
+              >
+                Start
+              </button>
+            )}
+            {navigating && (
+              <button
+                onClick={stopNavigation}
+                className="px-4 py-2 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700 transition-colors shadow-md"
+              >
+                Stop
+              </button>
+            )}
           </div>
-        </div>
-      )}
-
-      {/* Search Bar */}
-      <div className="bg-white shadow-md p-4 z-10">
-        <div className="max-w-4xl mx-auto flex items-stretch space-x-2">
-          <div className="flex-1 relative">
-            <input
-              ref={searchInputRef}
-              type="text"
-              placeholder="Search for destination..."
-              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-michigan-gold focus:outline-none text-gray-700"
-            />
-          </div>
-          <button
-            onClick={handleSearchClick}
-            className="px-5 rounded-lg bg-michigan-gold text-[#00274C] font-semibold hover:brightness-95 transition flex items-center justify-center shadow-md"
-            title="Search"
-          >
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-              <circle cx="11" cy="11" r="7" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-          </button>
-          {routeActive && !navigating && (
-            <button
-              onClick={startNavigation}
-              className="px-4 py-2 rounded-lg bg-[#00274C] text-white font-semibold hover:bg-[#1d3557] transition-colors shadow-md"
-            >
-              Start Navigation
-            </button>
-          )}
-          {navigating && (
-            <button
-              onClick={stopNavigation}
-              className="px-4 py-2 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700 transition-colors shadow-md"
-            >
-              Stop
-            </button>
-          )}
         </div>
       </div>
+
+      {/* (Search is integrated into the header row) */}
+      
 
       {/* Map Container */}
       <div className="flex-1 relative">
@@ -598,7 +586,7 @@ function HazardMapPage({ onBack, embed = false }) {
                 <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
               </svg>
               <div>
-                <h3 className="font-bold text-[#00274C] text-lg">Hazard Alert!</h3>
+                <h3 className="font-bold text-[#004e89] text-lg">Hazard Alert!</h3>
                 <p className="text-gray-600 text-sm">
                   {highlightedHazards.length} hazard{highlightedHazards.length > 1 ? 's' : ''} detected along your route
                 </p>
@@ -608,12 +596,12 @@ function HazardMapPage({ onBack, embed = false }) {
         )}
         {navigating && directionsResult && (
           <div className="absolute top-4 left-4 w-80 bg-white rounded-xl shadow-xl p-4 border border-gray-200 z-10 max-h-[70vh] overflow-y-auto">
-            <h3 className="font-bold text-[#00274C] mb-2">Directions</h3>
+            <h3 className="font-bold text-[#004e89] mb-2">Directions</h3>
             <ul className="space-y-2 text-sm">
               {directionsResult.routes[0].legs[0].steps.map((s, idx) => (
                 <li
                   key={idx}
-                  className={`p-2 rounded-md border ${idx === currentStepIndex ? 'bg-michigan-gold border-michigan-gold text-[#00274C] font-semibold' : 'bg-gray-50'} transition-colors`}
+                  className={`p-2 rounded-md border ${idx === currentStepIndex ? 'bg-michigan-gold border-michigan-gold text-[#004e89] font-semibold' : 'bg-gray-50'} transition-colors`}
                   dangerouslySetInnerHTML={{ __html: s.instructions }}
                 />
               ))}
@@ -623,7 +611,7 @@ function HazardMapPage({ onBack, embed = false }) {
               if (!nextHazard) return null
               return (
                 <div className="mt-4 p-3 rounded-lg bg-yellow-50 border-l-4 border-yellow-400">
-                  <p className="text-sm text-[#00274C] font-semibold">Nearest Hazard Ahead</p>
+                  <p className="text-sm text-[#004e89] font-semibold">Nearest Hazard Ahead</p>
                   <p className="text-xs text-gray-700">
                     {nextHazard.hazard.title} ~ {Math.round(nextHazard.distance)}m away
                   </p>
@@ -639,7 +627,7 @@ function HazardMapPage({ onBack, embed = false }) {
                 <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
               </svg>
               <div>
-                <h3 className="font-bold text-[#00274C] text-lg">Route Issue</h3>
+                <h3 className="font-bold text-[#004e89] text-lg">Route Issue</h3>
                 <p className="text-gray-600 text-sm">{routeError}</p>
               </div>
             </div>

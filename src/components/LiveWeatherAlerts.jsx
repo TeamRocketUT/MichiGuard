@@ -67,7 +67,7 @@ async function fetchAlertsBySearch(query) {
   return DUMMY_ALERTS.filter(a => a.area.toLowerCase().includes(q) || a.title.toLowerCase().includes(q))
 }
 
-export default function LiveWeatherAlerts() {
+export default function LiveWeatherAlerts({ embed = false }) {
   const [alerts, setAlerts] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -157,20 +157,20 @@ export default function LiveWeatherAlerts() {
         </div>
       )}
 
-      {/* Header + Search */}
+      {/* Header + Search (always show page title) */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-        <h1 className="text-2xl md:text-3xl font-extrabold text-[#00274C]">Live Weather Alerts</h1>
+        <h1 className="text-2xl md:text-3xl font-extrabold text-[#004e89]">Live Weather Alerts</h1>
         <form onSubmit={handleSubmit} className="flex items-stretch gap-2 w-full md:w-auto">
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search city or ZIP..."
-            className="w-full md:w-64 bg-white border-2 border-[#00274C] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-michigan-gold"
+            className="w-full md:w-64 bg-white border-2 border-[#004e89] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-michigan-gold"
           />
           <button
             type="submit"
-            className="px-4 py-2 rounded-lg bg-[#00274C] text-white font-semibold hover:bg-[#1d3557] transition-colors"
+            className="px-4 py-2 rounded-lg bg-[#004e89] text-white font-semibold hover:bg-[#004e89] transition-colors"
             title="Search"
           >
             Search
@@ -179,7 +179,7 @@ export default function LiveWeatherAlerts() {
             <button
               type="button"
               onClick={clearSearch}
-              className="px-3 py-2 rounded-lg bg-gray-100 text-[#00274C] font-semibold hover:bg-gray-200 transition-colors"
+              className="px-3 py-2 rounded-lg bg-gray-100 text-[#004e89] font-semibold hover:bg-gray-200 transition-colors"
               title="Clear search"
             >
               Clear
@@ -196,7 +196,7 @@ export default function LiveWeatherAlerts() {
       {hasNoAlerts && (
         <div className="bg-white rounded-xl shadow border border-gray-200 p-6 text-center">
           <div className="text-4xl mb-3">✅</div>
-          <p className="text-[#00274C] font-semibold">No active weather alerts. Roads are clear!</p>
+          <p className="text-[#004e89] font-semibold">No active weather alerts. Roads are clear!</p>
         </div>
       )}
 
@@ -216,7 +216,7 @@ function SeverityBadge({ level }) {
   const tone = (level || '').toLowerCase()
   const cls =
     tone === 'severe' ? 'bg-red-100 text-red-700 border-red-300' :
-    tone === 'moderate' ? 'bg-yellow-50 text-[#00274C] border-michigan-gold' :
+    tone === 'moderate' ? 'bg-yellow-50 text-[#004e89] border-michigan-gold' :
     'bg-gray-100 text-gray-700 border-gray-300'
   return (
     <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold border ${cls}`}>
@@ -239,14 +239,14 @@ function AlertCard({ alert }) {
 
   return (
     <div className="bg-white rounded-xl shadow hover:shadow-lg transition border border-gray-200 overflow-hidden">
-      <div className="bg-[#00274C] text-white px-4 py-3 flex items-center justify-between">
+      <div className="bg-[#004e89] text-white px-4 py-3 flex items-center justify-between">
         <h3 className="font-bold text-sm tracking-wide line-clamp-1">{alert.title}</h3>
         <SeverityBadge level={alert.severity} />
       </div>
       <div className="p-4 text-sm text-gray-800 space-y-2">
         <div className="flex items-center justify-between">
           <div className="text-gray-600">Area</div>
-          <div className="font-semibold text-[#00274C]">{alert.area}</div>
+          <div className="font-semibold text-[#004e89]">{alert.area}</div>
         </div>
         <div className="flex items-center justify-between">
           <div className="text-gray-600">Starts</div>
@@ -262,7 +262,7 @@ function AlertCard({ alert }) {
         </div>
       </div>
       <div className="px-4 pb-4">
-        <span className="text-[10px] font-semibold bg-michigan-gold text-[#00274C] px-2 py-1 rounded shadow">Live</span>
+        <span className="text-[10px] font-semibold bg-michigan-gold text-[#004e89] px-2 py-1 rounded shadow">Live</span>
       </div>
     </div>
   )

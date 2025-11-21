@@ -106,56 +106,43 @@ function PredictHazardsPage({ onBack, embed = false }) {
   }
 
   return (
-    <div className={`${embed ? 'relative h-full rounded-xl overflow-hidden' : 'fixed inset-0'} flex flex-col bg-gray-100 overflow-y-auto`}>
-      {/* Header */}
-      <div className="bg-[#00274C] text-white px-4 py-4 shadow flex items-center justify-between">
-        {!embed ? (
-          <>
-            <button onClick={onBack} className="flex items-center space-x-2 hover:text-michigan-gold transition-colors">
-              <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                <path d="M15 19l-7-7 7-7" />
-              </svg>
-              <span className="font-semibold">Back</span>
-            </button>
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Predict Road Hazards</h1>
-            <div className="w-16" />
-          </>
-        ) : (
-          <>
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">Predict Road Hazards</h1>
-            <div className="w-16" />
-          </>
-        )}
+    <div className={`${embed ? 'relative h-full rounded-xl overflow-hidden' : 'fixed inset-0'} flex flex-col bg-transparent overflow-y-auto`}>
+      {/* Header row matching Live Weather Alerts */}
+      <div className="px-4 pt-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-[#004e89]">Predict Road Hazards</h1>
+          <div className="w-16" />
+        </div>
       </div>
 
       <div className="px-4 pt-6 pb-16 max-w-6xl mx-auto w-full">
-        <p className="text-[#00274C] text-lg mb-6 font-medium">AI-powered hazard forecasting for Michigan drivers.</p>
+        <p className="text-[#004e89] text-lg mb-6 font-medium">AI-powered hazard forecasting for Michigan drivers.</p>
 
         {/* Top Info Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           <div className="bg-white rounded-xl shadow hover:shadow-lg transition p-4 border border-gray-100">
-            <h3 className="text-sm font-semibold text-[#00274C] uppercase tracking-wide">Current Weather</h3>
+            <h3 className="text-sm font-semibold text-[#004e89] uppercase tracking-wide">Current Weather</h3>
             <p className="mt-2 text-gray-700 text-sm">Temp: <span className="font-semibold">29°F</span></p>
             <p className="text-gray-700 text-sm">Snow Expected</p>
           </div>
           <div className="bg-white rounded-xl shadow hover:shadow-lg transition p-4 border border-gray-100">
-            <h3 className="text-sm font-semibold text-[#00274C] uppercase tracking-wide">Traffic Level</h3>
+            <h3 className="text-sm font-semibold text-[#004e89] uppercase tracking-wide">Traffic Level</h3>
             <p className="mt-2 text-gray-700 text-sm">Moderate Congestion</p>
           </div>
           <div className="bg-white rounded-xl shadow hover:shadow-lg transition p-4 border border-gray-100">
-            <h3 className="text-sm font-semibold text-[#00274C] uppercase tracking-wide">Road Type</h3>
+            <h3 className="text-sm font-semibold text-[#004e89] uppercase tracking-wide">Road Type</h3>
             <p className="mt-2 text-gray-700 text-sm">Urban Roads</p>
           </div>
         </div>
 
         {/* Hazard Type Dropdown */}
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0">
-          <label className="text-[#00274C] font-semibold text-sm" htmlFor="hazardType">Select Hazard Type</label>
+          <label className="text-[#004e89] font-semibold text-sm" htmlFor="hazardType">Select Hazard Type</label>
           <select
             id="hazardType"
             value={selectedHazard}
             onChange={(e) => setSelectedHazard(e.target.value)}
-            className="bg-white border-2 border-[#00274C] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-michigan-gold w-full sm:w-64"
+            className="bg-white border-2 border-[#004e89] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-michigan-gold w-full sm:w-64"
           >
             <option>Icy Roads</option>
             <option>Flood Risk</option>
@@ -185,11 +172,11 @@ function PredictHazardsPage({ onBack, embed = false }) {
                 </div>
               </div>
             )}
-            <div className="absolute top-4 left-4 bg-[#00274C] text-white px-3 py-2 rounded-md text-xs shadow">
+            <div className="absolute top-4 left-4 bg-[#004e89] text-white px-3 py-2 rounded-md text-xs shadow">
               Center: Ann Arbor
             </div>
             <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur rounded-lg px-3 py-2 text-xs shadow border border-gray-200">
-              <p className="font-semibold text-[#00274C]">Heatmap Legend</p>
+              <p className="font-semibold text-[#004e89]">Heatmap Legend</p>
               <p className="text-gray-600">Red: High risk • Yellow: Medium risk</p>
             </div>
           </div>
@@ -197,9 +184,9 @@ function PredictHazardsPage({ onBack, embed = false }) {
           {/* AI Insights */}
           <div className="flex flex-col space-y-6">
             <div className="group bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden transition hover:shadow-xl">
-              <div className="bg-[#00274C] text-white px-4 py-3 flex items-center justify-between">
+              <div className="bg-[#004e89] text-white px-4 py-3 flex items-center justify-between">
                 <h3 className="font-bold text-sm tracking-wide">AI-Generated Insights</h3>
-                <span className="text-[10px] font-semibold bg-michigan-gold text-[#00274C] px-2 py-1 rounded">Beta</span>
+                <span className="text-[10px] font-semibold bg-michigan-gold text-[#004e89] px-2 py-1 rounded">Beta</span>
               </div>
               <div className="p-4 text-sm text-gray-700 leading-relaxed">
                 <p className="mb-2">There is a <span className="font-bold">68%</span> chance of icy road conditions near <span className="font-semibold">Ann Arbor</span> between <span className="font-semibold">5–7 PM</span>.</p>
@@ -208,7 +195,7 @@ function PredictHazardsPage({ onBack, embed = false }) {
               <div className="px-4 pb-4">
                 <button
                   onClick={() => setShowExplain(prev => !prev)}
-                  className="mt-2 text-xs font-semibold bg-michigan-gold text-[#00274C] px-3 py-2 rounded-md shadow hover:brightness-95 transition"
+                  className="mt-2 text-xs font-semibold bg-michigan-gold text-[#004e89] px-3 py-2 rounded-md shadow hover:brightness-95 transition"
                 >
                   {showExplain ? 'Hide Explanation' : 'Explain This Prediction'}
                 </button>
@@ -221,11 +208,11 @@ function PredictHazardsPage({ onBack, embed = false }) {
             </div>
 
             <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-5">
-              <h3 className="font-bold text-[#00274C] text-sm mb-2 uppercase tracking-wide">Route Hazard Check</h3>
+              <h3 className="font-bold text-[#004e89] text-sm mb-2 uppercase tracking-wide">Route Hazard Check</h3>
               <p className="text-xs text-gray-600 mb-3">Evaluate hazard risk along a custom route.</p>
               <button
                 onClick={() => setRouteModalOpen(true)}
-                className="text-sm font-semibold bg-[#00274C] text-white px-4 py-2 rounded-md shadow hover:bg-[#1d3557] transition-colors"
+                className="text-sm font-semibold bg-[#004e89] text-white px-4 py-2 rounded-md shadow hover:bg-[#004e89] transition-colors"
               >
                 Check My Route Risk
               </button>
@@ -247,17 +234,17 @@ function PredictHazardsPage({ onBack, embed = false }) {
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 relative">
             <button
               onClick={() => { setRouteModalOpen(false); setRouteResult(null) }}
-              className="absolute top-3 right-3 text-gray-500 hover:text-[#00274C]"
+              className="absolute top-3 right-3 text-gray-500 hover:text-[#004e89]"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
-            <h3 className="text-lg font-bold text-[#00274C] mb-4">Check My Route Risk</h3>
+            <h3 className="text-lg font-bold text-[#004e89] mb-4">Check My Route Risk</h3>
             <form onSubmit={submitRouteRisk} className="space-y-4">
               <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[#00274C]">Start Location</label>
+                <label className="text-xs font-semibold text-[#004e89]">Start Location</label>
                 <input
                   type="text"
                   value={routeStart}
@@ -267,7 +254,7 @@ function PredictHazardsPage({ onBack, embed = false }) {
                 />
               </div>
               <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold text-[#00274C]">Destination</label>
+                <label className="text-xs font-semibold text-[#004e89]">Destination</label>
                 <input
                   type="text"
                   value={routeDest}
@@ -278,7 +265,7 @@ function PredictHazardsPage({ onBack, embed = false }) {
               </div>
               <button
                 type="submit"
-                className="w-full bg-michigan-gold text-[#00274C] font-semibold py-2 rounded-md shadow hover:brightness-95 transition text-sm"
+                className="w-full bg-michigan-gold text-[#004e89] font-semibold py-2 rounded-md shadow hover:brightness-95 transition text-sm"
               >
                 Evaluate Risk
               </button>

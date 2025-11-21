@@ -31,7 +31,7 @@ const items = [
 
 function Sidebar({ activeKey, onNavigate, onHome }) {
   return (
-    <aside className="h-screen w-60 bg-[#00274C] text-white flex flex-col py-6 shadow-xl">
+    <aside className="h-screen w-60 bg-[#004e89] text-white flex flex-col py-6 shadow-xl">
       <button
         className="px-5 pb-6 text-left group"
         onClick={() => onHome && onHome()}
@@ -49,12 +49,12 @@ function Sidebar({ activeKey, onNavigate, onHome }) {
               onClick={() => onNavigate?.(item.key)}
               className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition group text-left ${
                 active
-                  ? 'bg-michigan-gold text-[#00274C] shadow ring-2 ring-michigan-gold'
+                  ? 'bg-michigan-gold text-[#004e89] shadow ring-2 ring-michigan-gold'
                   : 'hover:bg-white/10'
               }`}
               title={item.label}
             >
-              <span className={`flex items-center justify-center h-8 w-8 rounded-md ${active ? 'bg-white text-[#00274C]' : 'bg-white/10'}`}>
+              <span className={`flex items-center justify-center h-8 w-8 rounded-md ${active ? 'bg-white text-[#004e89]' : 'bg-white/10'}`}>
                 {item.icon}
               </span>
               <span className="text-sm font-semibold">{item.label}</span>
