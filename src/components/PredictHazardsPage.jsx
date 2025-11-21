@@ -108,14 +108,14 @@ function PredictHazardsPage({ onBack, embed = false }) {
   return (
     <div className={`${embed ? 'relative h-full rounded-xl overflow-hidden' : 'fixed inset-0'} flex flex-col bg-transparent overflow-y-auto`}>
       {/* Header row matching Live Weather Alerts */}
-      <div className="px-4 pt-6">
+      <div className="px-4 pt-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-[#004e89]">Predict Road Hazards</h1>
           <div className="w-16" />
         </div>
       </div>
 
-      <div className="px-4 pt-6 pb-16 max-w-6xl mx-auto w-full">
+      <div className="px-4 pt-4 pb-16 max-w-6xl mx-auto w-full">
         <p className="text-[#004e89] text-lg mb-6 font-medium">AI-powered hazard forecasting for Michigan drivers.</p>
 
         {/* Top Info Cards */}
