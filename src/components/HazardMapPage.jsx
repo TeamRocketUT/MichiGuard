@@ -151,10 +151,21 @@ async function fetchMdotEvents() {
   const url = 'http://localhost:3001/api/mdot/events'
   console.log('📡 MDOT Hazard Fetch (proxy): Requesting', url)
   try {
-    const res = await fetch(url)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+    
+    const res = await fetch(url, { 
+      signal: controller.signal,
+      headers: {
+        'Accept': 'application/json'
+      }
+    })
+    clearTimeout(timeoutId)
+    
     if (!res.ok) {
       console.error('❌ Proxy MDOT fetch failed:', res.status, res.statusText)
-      throw new Error('Proxy MDOT events fetch failed: ' + res.status)
+      // Don't throw, return empty array so UI doesn't break
+      return []
     }
     const data = await res.json()
     console.log('📦 Proxy MDOT JSON response (raw):', data)
@@ -167,7 +178,12 @@ async function fetchMdotEvents() {
     if (normalized[0]) console.log('🔍 Sample MDOT event via proxy:', normalized[0])
     return normalized
   } catch (err) {
-    console.error('❌ Proxy MDOT fetch error:', err)
+    if (err.name === 'AbortError') {
+      console.warn('⚠️ MDOT fetch timeout - server may not be running. Start server with: npm run server')
+    } else {
+      console.error('❌ Proxy MDOT fetch error:', err)
+    }
+    // Return empty array instead of throwing so UI doesn't break
     return []
   }
 }
@@ -181,6 +197,7 @@ function normalizeMdotEvent(evt, idx) {
   const impact = evt.impact || evt.delay || evt.effect || null
   const startDate = evt.startDate || evt.start || evt.startTime || null
   const endDate = evt.endDate || evt.end || evt.endTime || null
+  const roadway = evt.roadway || evt.road || evt.route || null
   return {
     id: evt.id || evt.eventId || `mdot-${idx}`,
     eventType,
@@ -188,6 +205,7 @@ function normalizeMdotEvent(evt, idx) {
     impact,
     startDate,
     endDate,
+    roadway,
     lat: typeof lat === 'string' ? parseFloat(lat) : lat,
     lng: typeof lng === 'string' ? parseFloat(lng) : lng
   }
