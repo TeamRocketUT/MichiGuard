@@ -3,18 +3,13 @@ import './App.css'
 import MainLayout from './components/layout/MainLayout'
 
 function App() {
-  const [location, setLocation] = useState(null)
   const [locationError, setLocationError] = useState(null)
   const [showMainLayout, setShowMainLayout] = useState(false)
 
   const handleGetStarted = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude
-          })
+        () => {
           setShowMainLayout(true)
         },
         (error) => {

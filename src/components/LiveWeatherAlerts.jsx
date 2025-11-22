@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { analyzeTextWithWatson, isWatsonNLUConfigured } from '../utils/watsonNLU'
 import { getCurrentWeather, isWeatherAPIConfigured } from '../utils/weatherAPI'
 
@@ -30,7 +30,6 @@ async function summarizeAlert(alertText) {
     // Extract key information from Watson NLU analysis
     const keywords = analysis.keywords || []
     const sentiment = analysis.sentiment?.document || {}
-    const categories = analysis.categories || []
 
     // Build a concise summary using key terms
     if (keywords.length > 0) {
@@ -431,70 +430,71 @@ export default function LiveWeatherAlerts({ embed = false }) {
   }
 
   return (
-    <div className="p-4">
-      {/* Inline error/notice */}
-      {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-          {error}
-        </div>
-      )}
-
-      {/* Header + Search (always show page title) */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-[#004e89]">Live Weather Alerts</h1>
-          {locationName && (
-            <p className="text-sm text-[#004e89] font-semibold mt-1">
-              📍 {locationName}
-            </p>
-          )}
-          {lastUpdate && (
-            <p className="text-xs text-gray-600 mt-1">
-              Last updated: {lastUpdate.toLocaleTimeString()}
-            </p>
-          )}
-        </div>
-        <div className="flex items-stretch gap-2">
-          <form onSubmit={handleSubmit} className="flex items-stretch gap-2 w-full md:w-auto">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search city or ZIP..."
-              className="w-full md:w-64 bg-white border-2 border-[#004e89] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-michigan-gold"
-              disabled={loading}
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 rounded-lg bg-[#004e89] text-white font-semibold hover:bg-[#003d6b] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Search"
-            >
-              Search
-            </button>
-            {usingSearch && (
-              <button
-                type="button"
-                onClick={clearSearch}
+    <div className={`${embed ? 'relative h-full rounded-xl overflow-hidden' : 'fixed inset-0'} flex flex-col bg-transparent overflow-hidden`}>
+      {/* Header row */}
+      <div className="px-4 pt-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-[#004e89]">Live Weather Alerts</h1>
+          <div className="flex items-stretch gap-2 w-full md:w-auto">
+            <form onSubmit={handleSubmit} className="flex items-stretch gap-2 flex-1 md:flex-none md:w-auto">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search city or ZIP..."
+                className="w-full md:w-64 bg-white border-2 border-[#004e89] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-michigan-gold"
                 disabled={loading}
-                className="px-3 py-2 rounded-lg bg-gray-100 text-[#004e89] font-semibold hover:bg-gray-200 transition-colors disabled:opacity-50"
-                title="Clear search"
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-4 py-2 rounded-lg bg-[#004e89] text-white font-semibold hover:bg-[#003d6b] transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                title="Search"
               >
-                Clear
+                Search
               </button>
-            )}
-          </form>
-          <button
-            type="button"
-            onClick={refreshAlerts}
-            disabled={loading}
-            className="px-4 py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Refresh alerts"
-          >
-            🔄 Refresh
-          </button>
+              {usingSearch && (
+                <button
+                  type="button"
+                  onClick={clearSearch}
+                  disabled={loading}
+                  className="px-3 py-2 rounded-lg bg-gray-100 text-[#004e89] font-semibold hover:bg-gray-200 transition-colors disabled:opacity-50 text-sm"
+                  title="Clear search"
+                >
+                  Clear
+                </button>
+              )}
+            </form>
+            <button
+              type="button"
+              onClick={refreshAlerts}
+              disabled={loading}
+              className="px-4 py-2 rounded-lg bg-michigan-gold text-[#004e89] font-semibold hover:brightness-95 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              title="Refresh alerts"
+            >
+              🔄 Refresh
+            </button>
+          </div>
         </div>
+        {locationName && (
+          <p className="text-sm text-[#004e89] font-semibold mb-2">
+            📍 {locationName}
+          </p>
+        )}
+        {lastUpdate && (
+          <p className="text-xs text-gray-600 mb-4">
+            Last updated: {lastUpdate.toLocaleTimeString()}
+          </p>
+        )}
       </div>
+
+      <div className="px-4 pt-2 pb-4 max-w-6xl mx-auto w-full flex-1 overflow-y-auto">
+        {/* Inline error/notice */}
+        {error && (
+          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+            {error}
+          </div>
+        )}
 
       {/* Weather Display */}
       {weather && (
@@ -567,14 +567,15 @@ export default function LiveWeatherAlerts({ embed = false }) {
         </div>
       )}
 
-      {/* Alerts Grid */}
-      {!loading && alerts && alerts.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {alerts.map((a) => (
-            <AlertCard key={a.id} alert={a} />
-          ))}
-        </div>
-      )}
+        {/* Alerts Grid */}
+        {!loading && alerts && alerts.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {alerts.map((a) => (
+              <AlertCard key={a.id} alert={a} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

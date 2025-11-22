@@ -1,32 +1,11 @@
-import React from 'react'
+import { HiOutlineMap, HiOutlineCog, HiOutlineCloud, HiExclamation, HiOutlineBookOpen } from 'react-icons/hi'
 
 const items = [
-  { key: 'hazard', label: 'Hazard Map', icon: (
-    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-      <path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-    </svg>
-  )},
-  { key: 'predict', label: 'Predict Hazards', icon: (
-    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c0 .65.26 1.27.73 1.73.46.47 1.08.74 1.73.74H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
-    </svg>
-  )},
-  { key: 'weather', label: 'Live Weather Alerts', icon: (
-    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-      <path d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
-    </svg>
-  )},
-  { key: 'report', label: 'Report a Hazard', icon: (
-    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-      <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-    </svg>
-  )},
-  { key: 'resources', label: 'Safety Resources', icon: (
-    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-      <path d="M4 19.5A2.5 2.5 0 006.5 22h11a2.5 2.5 0 002.5-2.5V6a2 2 0 00-2-2h-11a2 2 0 00-2 2z" />
-    </svg>
-  )}
+  { key: 'hazard', label: 'Hazard Map', icon: <HiOutlineMap className="h-5 w-5" /> },
+  { key: 'predict', label: 'Predict Hazards', icon: <HiOutlineCog className="h-5 w-5" /> },
+  { key: 'weather', label: 'Live Weather Alerts', icon: <HiOutlineCloud className="h-5 w-5" /> },
+  { key: 'report', label: 'Report a Hazard', icon: <HiExclamation className="h-5 w-5" /> },
+  { key: 'resources', label: 'Safety Resources', icon: <HiOutlineBookOpen className="h-5 w-5" /> }
 ]
 
 function Sidebar({ activeKey, onNavigate, onHome }) {

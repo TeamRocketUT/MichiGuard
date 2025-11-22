@@ -1458,9 +1458,6 @@ function getHazardColor(eventType) {
                 </div>
               </div>
             )}
-            <div className="absolute top-4 left-4 bg-[#004e89] text-white px-3 py-2 rounded-md text-xs shadow">
-              {locationName || (userLocation ? `Lat: ${userLocation.lat.toFixed(4)}, Lng: ${userLocation.lng.toFixed(4)}` : 'Center: Ann Arbor')}
-            </div>
             <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur rounded-lg px-3 py-2 text-xs shadow border border-gray-200">
               <p className="font-semibold text-[#004e89]">Heatmap Legend</p>
               <p className="text-gray-600">Red: High risk • Yellow: Medium risk</p>

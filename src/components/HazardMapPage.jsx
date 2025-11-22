@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { HiChevronLeft, HiSearch, HiExclamation } from 'react-icons/hi'
 
 // API Keys from environment variables
 const ORS_API_KEY = import.meta.env.VITE_ORS_API_KEY
@@ -794,9 +795,7 @@ function HazardMapPage({ onBack, embed = false }) {
               onClick={onBack}
               className="flex items-center space-x-2 hover:text-michigan-gold transition-colors"
             >
-              <svg className="h-6 w-6" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
-                <path d="M15 19l-7-7 7-7"></path>
-              </svg>
+              <HiChevronLeft className="h-6 w-6" />
               <span className="font-semibold">Back</span>
             </button>
             <h1 className="text-xl font-bold">Hazard Map</h1>
@@ -855,10 +854,7 @@ function HazardMapPage({ onBack, embed = false }) {
               className="px-4 rounded-lg bg-michigan-gold text-[#004e89] font-semibold hover:brightness-95 transition flex items-center justify-center shadow-md"
               title="Search"
             >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                <circle cx="11" cy="11" r="7" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
+              <HiSearch className="h-5 w-5" />
             </button>
             <button
               onClick={toggleHazards}
@@ -902,9 +898,7 @@ function HazardMapPage({ onBack, embed = false }) {
         {routeActive && filteredHazards.length > 0 && (
           <div className="absolute top-4 left-4 right-4 md:left-auto md:right-4 md:w-80 bg-white rounded-xl shadow-2xl p-4 border-l-4 border-red-500 z-10">            
             <div className="flex items-start space-x-3">
-              <svg className="h-6 w-6 text-red-500 flex-shrink-0 mt-1" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
-                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-              </svg>
+              <HiExclamation className="h-6 w-6 text-red-500 flex-shrink-0 mt-1" />
               <div>
                 <h3 className="font-bold text-[#004e89] text-lg">Hazard Alert!</h3>
                 <p className="text-gray-600 text-sm">{filteredHazards.length} hazard{filteredHazards.length > 1 ? 's' : ''} detected</p>
@@ -996,9 +990,7 @@ function HazardMapPage({ onBack, embed = false }) {
         {routeError && (
           <div className="absolute bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-80 bg-white rounded-xl shadow-lg p-4 border-l-4 border-yellow-500 z-10">            
             <div className="flex items-start space-x-3">
-              <svg className="h-6 w-6 text-yellow-500 flex-shrink-0 mt-1" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
-                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-              </svg>
+              <HiExclamation className="h-6 w-6 text-yellow-500 flex-shrink-0 mt-1" />
               <div>
                 <h3 className="font-bold text-[#004e89] text-lg">Route Issue</h3>
                 <p className="text-gray-600 text-sm">{routeError}</p>
