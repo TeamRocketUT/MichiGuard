@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { HAZARD_COLORS, getHazardColor, normalizeHazardType, formatHazardLabel } from '../utils/hazardUtils'
 
 // API Keys from environment variables
 const ORS_API_KEY = import.meta.env.VITE_ORS_API_KEY
@@ -7,17 +8,7 @@ const ORS_API_KEY = import.meta.env.VITE_ORS_API_KEY
 // Required APIs: Maps JavaScript API, Places API, Directions API, Geocoding API (optional), Distance Matrix (optional)
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
 
-// Hazard icon colors (TomTom categories / generalized types)
-const HAZARD_COLORS = {
-  accident: '#FFD93D',
-  roadwork: '#FF6B6B',
-  closure: '#DC143C',
-  congestion: '#FFA500',
-  weather: '#4ECDC4',
-  lane: '#9370DB',
-  incident: '#f6bd60',
-  other: '#808080'
-}
+// Colors now imported from shared util for consistency with PredictHazardsPage
 
 /**
  * Fetch driving directions from OpenRouteService
@@ -201,16 +192,9 @@ function normalizeMdotEvent(evt, idx) {
   }
 }
 
+// Use shared color logic
 function getEventColor(type) {
-  const t = type.toLowerCase()
-  if (t.includes('accident') || t.includes('crash')) return HAZARD_COLORS.accident
-  if (t.includes('construct') || t.includes('work')) return HAZARD_COLORS.roadwork
-  if (t.includes('closure') || t.includes('closed') || t.includes('block')) return HAZARD_COLORS.closure
-  if (t.includes('congestion') || t.includes('traffic')) return HAZARD_COLORS.congestion
-  if (t.includes('weather')) return HAZARD_COLORS.weather
-  if (t.includes('lane')) return HAZARD_COLORS.lane
-  if (t.includes('incident') || t.includes('event')) return HAZARD_COLORS.incident
-  return HAZARD_COLORS.other
+  return getHazardColor(type)
 }
 
 /**
@@ -274,6 +258,8 @@ function HazardMapPage({ onBack, embed = false }) {
   const [isOffRoute, setIsOffRoute] = useState(false)
   const recentSpeedsRef = useRef([])
   const [showLegend, setShowLegend] = useState(false)
+  const [timeFilter, setTimeFilter] = useState('all') // 'all', 'current', 'future'
+  const [showIncidentList, setShowIncidentList] = useState(false)
 
   // Load Google Maps Script
   useEffect(() => {
@@ -437,9 +423,26 @@ function HazardMapPage({ onBack, embed = false }) {
       setFilteredHazards([])
       return
     }
-    let toRender = hazards
+    
+    // Apply time filter
+    let timeFiltered = hazards
+    const now = new Date()
+    if (timeFilter === 'current') {
+      timeFiltered = hazards.filter(h => {
+        const start = h.startDate ? new Date(h.startDate) : null
+        const end = h.endDate ? new Date(h.endDate) : null
+        return (!start || start <= now) && (!end || end > now)
+      })
+    } else if (timeFilter === 'future') {
+      timeFiltered = hazards.filter(h => {
+        const start = h.startDate ? new Date(h.startDate) : null
+        return start && start > now
+      })
+    }
+    
+    let toRender = timeFiltered
     if (routeFiltering && Array.isArray(routeGeometry) && routeGeometry.length) {
-      toRender = hazards.filter(h => h.lat && h.lng && isPointNearRoute({ lat: h.lat, lng: h.lng }, routeGeometry))
+      toRender = timeFiltered.filter(h => h.lat && h.lng && isPointNearRoute({ lat: h.lat, lng: h.lng }, routeGeometry))
       console.log(`📏 Hazards near route (≤1 mile): ${toRender.length}`)
       setFilteredHazards(toRender)
     } else {
@@ -447,6 +450,10 @@ function HazardMapPage({ onBack, embed = false }) {
     }
     toRender.forEach(h => {
       const color = getEventColor(h.eventType || h.type || '')
+      const now = new Date()
+      const startDate = h.startDate ? new Date(h.startDate) : null
+      const isFuture = startDate && startDate > now
+      
       const marker = new window.google.maps.Marker({
         position: { lat: h.lat, lng: h.lng },
         map: mapInstanceRef.current,
@@ -455,20 +462,26 @@ function HazardMapPage({ onBack, embed = false }) {
           path: window.google.maps.SymbolPath.CIRCLE,
           scale: 14,
           fillColor: color,
-          fillOpacity: 0.9,
-          strokeColor: '#ffffff',
-          strokeWeight: 3
+          fillOpacity: isFuture ? 0.6 : 0.9,
+          strokeColor: isFuture ? '#FFA500' : '#ffffff',
+          strokeWeight: isFuture ? 4 : 3
         }
       })
       const startStr = h.startDate ? new Date(h.startDate).toLocaleString() : 'N/A'
-      const endStr = h.endDate ? new Date(h.endDate).toLocaleString() : 'N/A'
+      const endStr = h.endDate ? new Date(h.endDate).toLocaleString() : 'Ongoing'
       const impactStr = h.impact ? `<p style="margin:2px 0 0;font-size:11px;color:#555;">Impact: ${h.impact}</p>` : ''
+      const roadwayStr = h.roadway ? `<p style="margin:2px 0 0;font-size:11px;font-weight:600;color:#004e89;">📍 ${h.roadway}</p>` : ''
+      const statusBadge = isFuture ? '<span style="background:#FFA500;color:white;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">UPCOMING</span>' : '<span style="background:#DC143C;color:white;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">ACTIVE</span>'
       const infoWindow = new window.google.maps.InfoWindow({
-        content: `<div style="padding:8px;max-width:240px;">
-          <h3 style="margin:0 0 4px;color:#004e89;font-weight:600;">${(h.eventType || '').toUpperCase()}</h3>
-          <p style="margin:0;font-size:12px;color:#555;">${h.description || 'No description'}</p>
-          <p style="margin:4px 0 0;font-size:11px;color:#777;">Start: ${startStr}</p>
-          <p style="margin:2px 0 0;font-size:11px;color:#777;">End: ${endStr}</p>
+        content: `<div style="padding:8px;max-width:260px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <h3 style="margin:0;color:#004e89;font-weight:600;font-size:13px;">${(h.eventType || '').toUpperCase()}</h3>
+            ${statusBadge}
+          </div>
+          ${roadwayStr}
+          <p style="margin:4px 0 0;font-size:12px;color:#555;line-height:1.4;">${h.description || 'No description'}</p>
+          <p style="margin:6px 0 0;font-size:11px;color:#777;">🕐 Start: ${startStr}</p>
+          <p style="margin:2px 0 0;font-size:11px;color:#777;">🕐 End: ${endStr}</p>
           ${impactStr}
         </div>`
       })
@@ -605,7 +618,7 @@ function HazardMapPage({ onBack, embed = false }) {
   // Re-display hazards whenever toggled or route/hazards change
   useEffect(() => {
     displayHazards(liveHazards)
-  }, [showHazards, routeGeometry, liveHazards, routeActive])
+  }, [showHazards, routeGeometry, liveHazards, routeActive, timeFilter])
 
   // External Google Maps navigation removed per request. In-app navigation only.
 
@@ -866,6 +879,25 @@ function HazardMapPage({ onBack, embed = false }) {
             >
               {showHazards ? 'Hide Hazards' : 'Show Hazards'}
             </button>
+            {showHazards && (
+              <select
+                value={timeFilter}
+                onChange={(e) => setTimeFilter(e.target.value)}
+                className="px-3 py-2 text-sm rounded-lg font-semibold bg-white text-[#004e89] border border-[#004e89]/20 hover:bg-gray-50 transition cursor-pointer"
+              >
+                <option value="all">All Incidents</option>
+                <option value="current">Current Only</option>
+                <option value="future">Upcoming Only</option>
+              </select>
+            )}
+            {showHazards && liveHazards.length > 0 && (
+              <button
+                onClick={() => setShowIncidentList(!showIncidentList)}
+                className="px-3 py-2 text-sm rounded-lg font-semibold bg-white text-[#004e89] border border-[#004e89]/20 hover:bg-gray-50 transition"
+              >
+                {showIncidentList ? 'Hide List' : `List (${liveHazards.length})`}
+              </button>
+            )}
             {routeActive && (
               <button
                 onClick={isNavigating ? () => stopNavigation(false) : startNavigation}
@@ -905,10 +937,58 @@ function HazardMapPage({ onBack, embed = false }) {
               <svg className="h-6 w-6 text-red-500 flex-shrink-0 mt-1" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
                 <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
               </svg>
-              <div>
+              <div className="flex-1">
                 <h3 className="font-bold text-[#004e89] text-lg">Hazard Alert!</h3>
-                <p className="text-gray-600 text-sm">{filteredHazards.length} hazard{filteredHazards.length > 1 ? 's' : ''} detected</p>
+                <p className="text-gray-600 text-sm">{filteredHazards.length} hazard{filteredHazards.length > 1 ? 's' : ''} on your route</p>
               </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Incident List Panel */}
+        {showIncidentList && liveHazards.length > 0 && (
+          <div className="absolute top-4 right-4 w-96 max-h-[70vh] bg-white/95 backdrop-blur rounded-xl shadow-2xl overflow-hidden z-10 border border-gray-200">
+            <div className="bg-[#004e89] text-white p-4 flex items-center justify-between">
+              <h3 className="font-bold text-lg">All Incidents ({liveHazards.length})</h3>
+              <button onClick={() => setShowIncidentList(false)} className="text-white hover:text-michigan-gold">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="overflow-y-auto max-h-[calc(70vh-64px)] p-3 space-y-2">
+              {liveHazards.map(h => {
+                const now = new Date()
+                const startDate = h.startDate ? new Date(h.startDate) : null
+                const endDate = h.endDate ? new Date(h.endDate) : null
+                const isFuture = startDate && startDate > now
+                const isActive = (!startDate || startDate <= now) && (!endDate || endDate > now)
+                
+                return (
+                  <div key={h.id} className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md transition cursor-pointer" onClick={() => {
+                    if (mapInstanceRef.current && h.lat && h.lng) {
+                      mapInstanceRef.current.panTo({lat: h.lat, lng: h.lng})
+                      mapInstanceRef.current.setZoom(14)
+                    }
+                  }}>
+                    <div className="flex items-start justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{backgroundColor: getEventColor(h.eventType)}}></div>
+                        <span className="text-xs font-bold text-[#004e89]">{h.eventType?.toUpperCase()}</span>
+                      </div>
+                      {isFuture && <span className="text-[9px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-semibold">UPCOMING</span>}
+                      {isActive && <span className="text-[9px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold">ACTIVE NOW</span>}
+                    </div>
+                    {h.roadway && <p className="text-xs font-semibold text-gray-700 mb-1">📍 {h.roadway}</p>}
+                    <p className="text-xs text-gray-600 mb-2 line-clamp-2">{h.description}</p>
+                    <div className="text-[10px] text-gray-500 space-y-0.5">
+                      <p>Start: {startDate ? startDate.toLocaleDateString() + ' ' + startDate.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : 'N/A'}</p>
+                      <p>End: {endDate ? endDate.toLocaleDateString() + ' ' + endDate.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : 'Ongoing'}</p>
+                      {h.impact && <p className="text-orange-600 font-semibold">⚠️ {h.impact}</p>}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
@@ -973,6 +1053,10 @@ function HazardMapPage({ onBack, embed = false }) {
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full" style={{ backgroundColor: HAZARD_COLORS.closure }}></div>
               <span className="text-xs text-gray-700">Closure</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded-full" style={{ backgroundColor: HAZARD_COLORS.lane }}></div>
+              <span className="text-xs text-gray-700">Lane Closure</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full" style={{ backgroundColor: HAZARD_COLORS.congestion }}></div>
