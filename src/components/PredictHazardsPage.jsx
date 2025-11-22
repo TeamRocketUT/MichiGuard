@@ -7,7 +7,13 @@ async function fetchMdotEvents() {
   const url = 'http://localhost:3001/api/mdot/events'
   console.log('📡 MDOT Hazard Fetch (proxy): Requesting', url)
   try {
-    const res = await fetch(url)
+    // Add timeout to prevent hanging
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
+    
+    const res = await fetch(url, { signal: controller.signal })
+    clearTimeout(timeoutId)
+    
     if (!res.ok) {
       console.error('❌ Proxy MDOT fetch failed:', res.status, res.statusText)
       return []
@@ -22,7 +28,11 @@ async function fetchMdotEvents() {
     console.log(`✅ Proxy MDOT events loaded: ${normalized.length}`)
     return normalized
   } catch (err) {
-    console.error('❌ Proxy MDOT fetch error:', err)
+    if (err.name === 'AbortError') {
+      console.warn('⚠️ MDOT fetch timeout - continuing without hazard data')
+    } else {
+      console.error('❌ Proxy MDOT fetch error:', err)
+    }
     return []
   }
 }
@@ -499,35 +509,53 @@ function PredictHazardsPage({ onBack, embed = false }) {
     setShowExplain(false)
     setExplanationText(null)
     
-    // Reset states to ensure fresh calculations
-    setWeatherData(null)
-    setHazardRisk(null)
-    setAllHazardRisks({})
-    setAiInsights(null)
-    
     const loc = { lat, lng }
     setUserLocation(loc)
     setLocationName(name)
     setLoadingWeather(true)
     
-    // Fetch real-time weather and hazards in parallel
-    const [weather, hazards] = await Promise.all([
-      getCurrentWeather(lat, lng),
+    // Reset states to ensure fresh calculations (but keep userLocation set)
+    setWeatherData(null)
+    setHazardRisk(null)
+    setAllHazardRisks({})
+    setAiInsights(null)
+    setLiveHazards([])
+    setNearbyHazards([])
+    
+    try {
+      // Fetch weather first and set it immediately - don't wait for hazards
+      // This allows risk calculation to happen right away
+      const weather = await getCurrentWeather(lat, lng)
+      if (weather) {
+        setWeatherData(weather)
+      }
+      setLoadingWeather(false) // Mark loading as done once weather is loaded
+      
+      // Fetch hazards in background - don't block the UI
+      // This allows risk to be calculated immediately with just weather data
       fetchMdotEvents()
-    ])
-    
-    if (weather) {
-      setWeatherData(weather)
+        .then(hazards => {
+          if (Array.isArray(hazards)) {
+            setLiveHazards(hazards)
+            // Filter hazards near location (optimize by limiting check)
+            // Only check first 50 hazards to avoid performance issues
+            const hazardsToCheck = hazards.slice(0, 50)
+            const nearby = hazardsToCheck.filter(h => isHazardNearLocation(h, loc, 10))
+            setNearbyHazards(nearby)
+          }
+        })
+        .catch(err => {
+          console.warn('Hazards fetch failed (non-critical):', err)
+          setLiveHazards([])
+          setNearbyHazards([])
+        })
+    } catch (error) {
+      console.error('Error updating location:', error)
+      setWeatherData(null)
+      setLiveHazards([])
+      setNearbyHazards([])
+      setLoadingWeather(false)
     }
-    
-    if (Array.isArray(hazards)) {
-      setLiveHazards(hazards)
-      // Filter hazards near location
-      const nearby = hazards.filter(h => isHazardNearLocation(h, loc, 10))
-      setNearbyHazards(nearby)
-    }
-    
-    setLoadingWeather(false)
   }
 
   // Get user location and fetch real-time weather on initial load
@@ -752,6 +780,8 @@ function getHazardColor(eventType) {
 
   // Update hazard risk assessment for all hazard types when weather changes
   useEffect(() => {
+    // Only calculate if we have weather data and user location
+    // Don't reset if weatherData is null during loading - wait for it to be set
     if (weatherData && userLocation) {
       const hazardTypes = ['Icy Roads', 'Flood Risk', 'Low Visibility', 'High Wind Risk', 'Accident Likelihood']
       const risks = {}
@@ -788,11 +818,9 @@ function getHazardColor(eventType) {
         factors: Object.values(risks).flatMap(r => r.factors).filter((v, i, a) => a.indexOf(v) === i).slice(0, 5),
         historicalData: historical
       })
-    } else if (!weatherData) {
-      // Reset when weather data is cleared
-      setAllHazardRisks({})
-      setHazardRisk(null)
     }
+    // Don't reset when weatherData is null - it might just be loading
+    // Only reset if userLocation is cleared (which shouldn't happen during search)
   }, [weatherData, liveHazards, userLocation])
 
   // Update heatmap based on real weather data
@@ -900,11 +928,19 @@ function getHazardColor(eventType) {
 
 
   // Generate AI insights using real weather data + Watson NLU for intelligent predictions
+  // Note: This is debounced to avoid blocking the UI
+  const insightsTimeoutRef = useRef(null)
+  
   useEffect(() => {
     // Reset insights when location changes (before new data loads)
     if (!weatherData || !userLocation || Object.keys(allHazardRisks).length === 0) {
       setAiInsights(null)
       setLoadingInsights(false)
+      // Clear any pending timeout
+      if (insightsTimeoutRef.current) {
+        clearTimeout(insightsTimeoutRef.current)
+        insightsTimeoutRef.current = null
+      }
       return
     }
     
@@ -1113,13 +1149,28 @@ function getHazardColor(eventType) {
       setLoadingInsights(false)
     }
 
-    // Only generate insights if we have weather data and hazard risks calculated
-    if (weatherData && Object.keys(allHazardRisks).length > 0) {
-      generateInsights()
-    } else {
-      // Reset insights if data is not ready
-      setAiInsights(null)
-      setLoadingInsights(false)
+    // Debounce AI insights generation - don't block UI, generate in background
+    // Wait 1 second after data is ready to avoid rapid calls
+    if (insightsTimeoutRef.current) {
+      clearTimeout(insightsTimeoutRef.current)
+    }
+    
+    insightsTimeoutRef.current = setTimeout(() => {
+      if (weatherData && Object.keys(allHazardRisks).length > 0) {
+        generateInsights()
+      } else {
+        // Reset insights if data is not ready
+        setAiInsights(null)
+        setLoadingInsights(false)
+      }
+      insightsTimeoutRef.current = null
+    }, 1000) // 1 second debounce - allows UI to render first
+    
+    return () => {
+      if (insightsTimeoutRef.current) {
+        clearTimeout(insightsTimeoutRef.current)
+        insightsTimeoutRef.current = null
+      }
     }
   }, [weatherData, hazardRisk, locationName, allHazardRisks, nearbyHazards, userLocation])
 
