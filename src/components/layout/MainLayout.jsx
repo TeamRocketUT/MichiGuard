@@ -6,7 +6,7 @@ import LiveWeatherAlerts from '../LiveWeatherAlerts'
 import ReportHazardPage from '../ReportHazardPage'
 import SafetyResourcesPage from '../SafetyResourcesPage'
 
-function MainLayout({ initialSection = 'hazard', onHome }) {
+function MainLayout({ initialSection = 'hazard', onHome, embedded = false }) {
   const [active, setActive] = useState(initialSection)
 
   let content = null

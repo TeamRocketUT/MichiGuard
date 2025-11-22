@@ -39,20 +39,6 @@ function ReportHazardPage({ embed = false }) {
     return labels[type] || type
   }
 
-  // Lightweight local analysis fallback when Watson NLU is unavailable
-  const localAnalyze = (text) => {
-    const lower = text.toLowerCase()
-    const keywords = [
-      'pothole','hole','accident','crash','collision','debris','obstruction','object',
-      'flood','water','ice','icy','snow','slippery','construction','work','repair'
-    ]
-
-    const found = keywords.find(k => lower.includes(k))
-    const hazardType = found ? mapKeywordToHazardType(found) : 'pothole'
-    const summary = text.length > 150 ? text.substring(0, 147) + '...' : text
-    return { location: '', hazardType, summary }
-  }
-
   // Analyze with Watson AI
   const handleAnalyze = async () => {
     if (description.trim().length < 15) {
@@ -113,16 +99,11 @@ function ReportHazardPage({ embed = false }) {
         // Move to step 2
         setStep(2)
       } else {
-        console.warn('AI analysis unavailable; using local heuristic analysis instead.')
-        const local = localAnalyze(description)
-        setExtractedData(local)
-        setStep(2)
+        alert('AI analysis failed. Please try again or check your Watson NLU credentials.')
       }
     } catch (error) {
       console.error('Analysis error:', error)
-      const local = localAnalyze(description)
-      setExtractedData(local)
-      setStep(2)
+      alert('Error analyzing description. Please try again.')
     } finally {
       setAnalyzing(false)
     }

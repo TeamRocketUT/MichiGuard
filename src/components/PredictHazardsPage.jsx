@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { analyzeTextWithWatson } from '../utils/watsonNLU'
 import { getCurrentWeather, getWeatherForecast, assessHazardRisk, isWeatherAPIConfigured } from '../utils/weatherAPI'
+import { getHazardColor, normalizeHazardType, formatHazardLabel, HAZARD_COLORS } from '../utils/hazardUtils'
 
 // MDOT 511 real-time events fetch via local proxy (avoids CORS)
 async function fetchMdotEvents() {
@@ -632,16 +633,7 @@ function PredictHazardsPage({ onBack, embed = false }) {
     })
   }, [mapsLoaded, liveHazards])
 
-function getHazardColor(eventType) {
-  const t = (eventType || '').toLowerCase()
-  if (t.includes('accident') || t.includes('crash')) return '#FFD93D'
-  if (t.includes('construct') || t.includes('work')) return '#FF6B6B'
-  if (t.includes('closure') || t.includes('closed')) return '#DC143C'
-  if (t.includes('congestion') || t.includes('traffic')) return '#FFA500'
-  if (t.includes('weather')) return '#4ECDC4'
-  if (t.includes('lane')) return '#9370DB'
-  return '#808080'
-}
+// Removed local color function; now using shared getHazardColor
 
   // Handle location search
   const handleLocationSearch = async (e) => {
@@ -812,11 +804,13 @@ function getHazardColor(eventType) {
       const maxRisk = Object.values(risks).find(r => r.score === Math.max(...riskScores))
       
       // Then update hazard risk
+      // Map overall level to shared categories (if prediction hazard types imply weather/accident)
       setHazardRisk({
         level: maxRisk?.level || 'Low',
         score: Math.round(avgScore),
         factors: Object.values(risks).flatMap(r => r.factors).filter((v, i, a) => a.indexOf(v) === i).slice(0, 5),
-        historicalData: historical
+        historicalData: historical,
+        categories: Object.keys(risks).map(r => normalizeHazardType(r))
       })
     }
     // Don't reset when weatherData is null - it might just be loading
@@ -1571,7 +1565,10 @@ function getHazardColor(eventType) {
                         <div className="space-y-1.5">
                           {Object.entries(aiInsights.allHazardRisks).map(([type, risk]) => (
                             <div key={type} className="flex items-center justify-between bg-white rounded px-2 py-1 border border-gray-200">
-                              <span className="text-xs font-medium text-gray-700">{type}:</span>
+                              <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getHazardColor(type) }} />
+                                <span className="text-xs font-medium text-gray-700">{formatHazardLabel(type)}:</span>
+                              </div>
                               <span className={`text-xs font-bold px-2 py-0.5 rounded ${
                                 risk.level === 'High' ? 'bg-red-100 text-red-700' :
                                 risk.level === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
